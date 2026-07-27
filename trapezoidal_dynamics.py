@@ -134,38 +134,56 @@ G_VEC = np.array([0.0, 0.0, -9.81])   # gravity in world frame (Z-up)
 # TRAPEZOID PROFILE VALIDATION
 # ──────────────────────────────────────────────────────────────────────────────
 def check_trapezoidal(times: np.ndarray, velocities: np.ndarray,
-                      joint_name: str, tol: float = 0.05) -> dict:
+                      joint_name: str, tol: float = 0.15) -> dict:
     """
     Assess how trapezoidal the velocity profile is.
-    Returns a dict with: is_trapezoidal, ramp_up_end, cruise_start,
-    cruise_end, ramp_down_start, peak_velocity, jerk_rms.
+    tol=0.15 means any point within 15% of peak velocity counts as "cruise".
+    This is intentionally loose — Pilz PTP generates true trapezoids but
+    with limited waypoint density (30-40 pts), the flat-top region may be
+    only 1-3 samples wide.
+    Returns a dict with: is_trapezoidal, cruise_fraction, peak_velocity, jerk_rms.
     """
-    if len(velocities) < 5:
-        return {"is_trapezoidal": False, "note": "too few points"}
+    n = len(velocities)
+    if n < 3:
+        return {"is_trapezoidal": False, "jerk_rms": 0.0, "note": "too few points"}
 
     v_peak = np.max(np.abs(velocities))
     if v_peak < 1e-6:
-        return {"is_trapezoidal": True, "note": "zero motion"}
+        return {"is_trapezoidal": True, "jerk_rms": 0.0, "note": "zero motion"}
 
     v_norm = np.abs(velocities) / v_peak
-    cruise_mask = v_norm > (1.0 - tol)
+
+    # Cruise = within `tol` of peak AND not at the very first or last sample
+    cruise_mask = (v_norm > (1.0 - tol)) & \
+                  (np.arange(n) > 0) & \
+                  (np.arange(n) < n - 1)
     cruise_indices = np.where(cruise_mask)[0]
 
-    dt = np.diff(times)
-    dt = np.where(dt < 1e-9, 1e-9, dt)
-    acc  = np.gradient(velocities, times)
-    jerk = np.gradient(acc, times)
-    jerk_rms = float(np.sqrt(np.mean(jerk**2)))
+    acc      = np.gradient(velocities, times)
+    jerk     = np.gradient(acc, times)
+    jerk_rms = float(np.sqrt(np.mean(jerk ** 2)))
+
+    # A profile is trapezoidal if:
+    #   • there is at least 1 interior cruise sample, AND
+    #   • velocity rises before the cruise and falls after (monotone ramps)
+    has_cruise = len(cruise_indices) >= 1
+    if has_cruise:
+        mid        = int(np.median(cruise_indices))
+        rises_ok   = v_norm[mid] >= v_norm[0]          # velocity grew to cruise
+        falls_ok   = v_norm[mid] >= v_norm[-1]         # velocity fell from cruise
+        is_trap    = rises_ok and falls_ok
+    else:
+        is_trap = False
 
     result = {
         "joint":            joint_name,
         "peak_velocity":    float(v_peak),
         "jerk_rms":         jerk_rms,
-        "has_cruise_phase": len(cruise_indices) > 2,
-        "is_trapezoidal":   len(cruise_indices) > 2,
+        "has_cruise_phase": has_cruise,
+        "is_trapezoidal":   is_trap,
     }
-    if result["has_cruise_phase"]:
-        result["cruise_fraction"] = len(cruise_indices) / len(velocities)
+    if has_cruise:
+        result["cruise_fraction"] = round(len(cruise_indices) / n, 3)
     return result
 
 
@@ -378,6 +396,8 @@ def parse_args():
                    help="Velocity scaling factor 0–1   (default: 0.5)")
     p.add_argument("--accel", type=float, default=0.3,
                    help="Acceleration scaling factor 0–1 (default: 0.3)")
+    p.add_argument("--home", action="store_true",
+                   help="Return to home position first before planning (use when already at target)")
     return p.parse_args()
 
 
@@ -413,6 +433,14 @@ def main():
     spin_thread.start()
     time.sleep(1.0)
 
+    # ── Optional: go home first so we always have meaningful travel ───────────
+    if args.home:
+        node.get_logger().info("🏠  Returning to home position first...")
+        moveit2.move_to_configuration([0.0, 0.0, 0.0, 0.0, 0.0])
+        moveit2.wait_until_executed()
+        node.get_logger().info("🏠  Home reached. Now planning target motion...")
+        time.sleep(0.5)
+
     mode = "CARTESIAN LIN" if args.cartesian else "PTP"
     node.get_logger().info(
         f"Planning {mode} motion | vel={args.vel} | accel={args.accel} | "
@@ -439,6 +467,17 @@ def main():
 
     node.get_logger().info(f"✅  Got trajectory: {T} waypoints, joints={joint_names}")
 
+    # ── Guard: robot may already be at the target ─────────────────────────────
+    if T < 2:
+        node.get_logger().warn(
+            "⚠️  Trajectory has only 1 waypoint — the robot is already at the "
+            "target position. Nothing to analyse.\n"
+            "   Tip: run with --home first to return to the home pose, then re-run."
+        )
+        rclpy.shutdown()
+        spin_thread.join()
+        return
+
     # ── Extract arrays ────────────────────────────────────────────────────────
     times  = np.array([p.time_from_start.sec + p.time_from_start.nanosec * 1e-9
                        for p in points])
@@ -447,11 +486,8 @@ def main():
     velocities    = np.array([[p.velocities[j]    if p.velocities    else 0.0 for j in range(n_joints)] for p in points])
     accelerations = np.array([[p.accelerations[j] if p.accelerations else 0.0 for j in range(n_joints)] for p in points])
 
-    # Differentiate accelerations to get jerk (verify trapezoidal shape)
-    if T > 1:
-        accelerations_fd = np.gradient(velocities, times, axis=0)   # cross-check
-    else:
-        accelerations_fd = accelerations
+    # Finite-difference cross-check on accelerations
+    accelerations_fd = np.gradient(velocities, times, axis=0)
 
     # ── Compute 3D dynamics ───────────────────────────────────────────────────
     node.get_logger().info("Computing 3D torques (τ=Iα) and forces (F=ma)...")
