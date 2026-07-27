@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# ROS2 build artifacts
+build/
+install/
+log/
+.catkin_workspace
+
+# ROS2 generated files
+COLCON_IGNORE
+.colcon_ignore
+
+# Generated plots and images (keep sources, not outputs)
+*_plot.png
+*_dynamics_plot.png
+trajectory_plot.png
+speed_sweep_plot.png
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# RViz user config (machine-specific)
+*.rviz.user
+
+# Log files
+*.log
+rosout.log
+
+# Python virtual environments
+venv/
+.env/
+env/
+
+# Git
+*.orig

@@ -1,0 +1,10 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: Robot_to_URDF_New_Pakka_description
+    relative_path: urdf/Robot_to_URDF_New_Pakka.urdf
+  srdf:
+    relative_path: config/Robot_to_URDF_New_Pakka.srdf
+  package_settings:
+    author_name: saad
+    author_email: si09370@st.habib.edu.pk
+    generated_timestamp: 1784541684

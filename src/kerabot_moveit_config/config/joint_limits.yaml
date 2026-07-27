@@ -1,0 +1,60 @@
+# =============================================================================
+# joint_limits.yaml — Kerabot MoveIt2 Joint Limits
+#
+# Physics-derived jerk limits computed from:
+#   τ_max = 5.0 Nm (URDF effort limit, all joints)
+#   max_jerk ≈ τ_max / I_effective
+#
+# Joint inertia estimates (from URDF, about joint axis):
+#   Revolute_1 (Z): Izz_link1 ≈ 0.009 → jerk ≈ 5.0/0.009 ≈ 556  → capped at 20
+#   Revolute_2 (X): Ixx_link2 ≈ 0.012 → jerk ≈ 5.0/0.012 ≈ 417  → capped at 15
+#   Revolute_3 (X): Ixx_link3 ≈ 0.034 → jerk ≈ 5.0/0.034 ≈ 147  → capped at 10
+#   Revolute_4 (Z): Izz_link4 ≈ 0.001 → jerk ≈ 5.0/0.001 ≈ 5000 → capped at 20
+#   Revolute_5 (X): Ixx_link5 ≈ 0.002 → jerk ≈ 5.0/0.002 ≈ 2500 → capped at 20
+# =============================================================================
+
+# Global scaling factors — raised from 0.1 to avoid poor trapezoidal profiles.
+# Pilz PTP respects these AND the per-joint limits below simultaneously.
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.3
+
+joint_limits:
+  Revolute_1:
+    has_velocity_limits: true
+    max_velocity: 2.7925          # rad/s  (matches URDF)
+    has_acceleration_limits: true
+    max_acceleration: 5.0         # rad/s² — raised for crisper trapezoid ramps
+    has_jerk_limits: true
+    max_jerk: 20.0                # rad/s³ — physics-derived, capped conservatively
+
+  Revolute_2:
+    has_velocity_limits: true
+    max_velocity: 2.7925
+    has_acceleration_limits: true
+    max_acceleration: 4.0         # slightly lower: heavier link2 chain
+    has_jerk_limits: true
+    max_jerk: 15.0
+
+  Revolute_3:
+    has_velocity_limits: true
+    max_velocity: 2.7925
+    has_acceleration_limits: true
+    max_acceleration: 3.0         # link3 has largest Ixx (0.034), needs gentler ramp
+    has_jerk_limits: true
+    max_jerk: 10.0
+
+  Revolute_4:
+    has_velocity_limits: true
+    max_velocity: 2.7925
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+    has_jerk_limits: true
+    max_jerk: 20.0
+
+  Revolute_5:
+    has_velocity_limits: true
+    max_velocity: 2.7925
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+    has_jerk_limits: true
+    max_jerk: 20.0

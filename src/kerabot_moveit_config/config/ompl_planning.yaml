@@ -1,0 +1,44 @@
+# =============================================================================
+# ompl_planning.yaml — Kerabot MoveIt2 Planning Pipeline Configuration
+#
+# PRIMARY planner : Pilz PTP  → true trapezoidal velocity profile
+# FALLBACK planner: OMPL RRTConnect (kept for obstacle-aware planning)
+#
+# To switch planners at runtime, set the planning_pipeline parameter in
+# your MoveGroup request, or pass --ros-args -p planning_pipeline:=ompl
+# =============================================================================
+
+# ── Pilz Industrial Motion Planner ──────────────────────────────────────────
+# PTP (Point-to-Point): trapezoidal velocity profile, jerk-limited,
+# synchronised across all joints. Best for smooth, repeatable motions.
+# LIN: straight Cartesian line with trapezoidal profile.
+# CIRC: circular arc.
+planning_plugin: pilz_industrial_motion_planner/CommandPlanner
+
+request_adapters: >-
+    default_planner_request_adapters/FixWorkspaceBounds
+    default_planner_request_adapters/FixStartStateBounds
+    default_planner_request_adapters/FixStartStateCollision
+    default_planner_request_adapters/FixStartStatePathConstraints
+
+# ── OMPL pipeline (kept as named fallback) ───────────────────────────────────
+ompl:
+  planning_plugin: ompl_interface/OMPLPlanner
+  request_adapters: >-
+      default_planner_request_adapters/AddRuckigTrajectorySmoothing
+      default_planner_request_adapters/FixWorkspaceBounds
+      default_planner_request_adapters/FixStartStateBounds
+      default_planner_request_adapters/FixStartStateCollision
+      default_planner_request_adapters/FixStartStatePathConstraints
+  start_state_max_bounds_error: 0.1
+
+  arm:
+    default_planner_config: RRTConnect
+    planner_configs:
+      - RRTConnect
+    projection_evaluator: joints(Revolute_1,Revolute_2)
+    longest_valid_segment_fraction: 0.005
+
+  RRTConnect:
+    type: geometric::RRTConnect
+    range: 0.0
