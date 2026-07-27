@@ -349,14 +349,15 @@ def plot_all(times, positions, velocities, accelerations, dynamics, joint_names,
         peak_tau = float(np.max(np.linalg.norm(torques[:, j, :], axis=1)))
         peak_f   = float(np.max(np.linalg.norm(forces[:, j, :], axis=1)))
         peak_jk  = float(np.max(np.abs(jerk[:, j])))
+        tau_ok   = peak_tau <= 5.0
         table_data.append([
             joint_names[j],
-            f"{peak_tau:.3f}",
+            f"{peak_tau:.3f}  {'[OK]' if tau_ok else '[!!]'}",
             "5.000",
             f"{peak_f:.3f}",
             f"{peak_jk:.3f}",
             f"{trap.get('jerk_rms', 0.0):.3f}",
-            "✅ Yes" if trap["is_trapezoidal"] else "⚠️  No",
+            "[TRAP]" if trap["is_trapezoidal"] else "[WARN]",
         ])
 
     tbl = summary_ax.table(cellText=table_data, colLabels=col_labels,
