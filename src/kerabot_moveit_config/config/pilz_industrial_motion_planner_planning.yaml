@@ -1,0 +1,32 @@
+# =============================================================================
+# pilz_industrial_motion_planner_planning.yaml — Pilz Pipeline Configuration
+#
+# This file is loaded by moveit_configs_utils.planning_pipelines() when
+# pipelines=["ompl", "pilz_industrial_motion_planner"] is specified.
+# It is loaded FLAT — all top-level keys become parameters under
+# /move_group/pilz_industrial_motion_planner.*
+#
+# Ruckig smoothing is applied as the first request adapter so that the
+# trapezoidal Pilz PTP profile gets S-curve corner rounding (jerk-limited).
+# Jerk limits come from joint_limits.yaml.
+# =============================================================================
+
+planning_plugin: pilz_industrial_motion_planner/CommandPlanner
+
+request_adapters: >-
+    default_planner_request_adapters/AddRuckigTrajectorySmoothing
+    default_planner_request_adapters/FixWorkspaceBounds
+    default_planner_request_adapters/FixStartStateBounds
+    default_planner_request_adapters/FixStartStateCollision
+    default_planner_request_adapters/FixStartStatePathConstraints
+
+# Ruckig smoothing type: 2 = Ruckig (jerk-limited S-curves)
+# 1 = TimeOptimalTrajectoryGeneration (faster but no jerk limit)
+smoothing_type: 2
+
+default_planner_config: PTP
+
+# Expose Pilz sequence planning capability (for chained moves via MoveGroupSequenceAction)
+capabilities: >-
+    pilz_industrial_motion_planner/MoveGroupSequenceAction
+    pilz_industrial_motion_planner/MoveGroupSequenceService

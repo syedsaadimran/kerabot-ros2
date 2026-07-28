@@ -1,21 +1,16 @@
 # =============================================================================
-# ompl_planning.yaml — Kerabot MoveIt2 Planning Pipeline Configuration
+# ompl_planning.yaml — OMPL Pipeline Configuration for Kerabot MoveIt2
 #
-# PIPELINE STACK (applied in order):
-#   1. Pilz PTP  → deterministic trapezoidal velocity profile
-#   2. AddRuckigTrajectorySmoothing → rounds sharp ramp corners into S-curves,
-#      enforcing jerk limits from joint_limits.yaml. Eliminates mechanical shock
-#      at ramp-up / ramp-down transitions.
+# IMPORTANT: This file is loaded by moveit_configs_utils.planning_pipelines()
+# when pipelines=["ompl", ...] is specified in demo.launch.py.
+# The ENTIRE FILE is the config for the "ompl" pipeline.
+# Keys here become ROS parameters under /move_group/ompl.*
 #
-# Result: smooth, jerk-limited, trapezoidal-shaped motion — industrial grade.
-#
-# FALLBACK pipeline (named "ompl"):
-#   OMPL RRTConnect — for obstacle-aware / constrained planning when Pilz
-#   geometry is insufficient. Also uses Ruckig post-processing.
+# Do NOT nest a second "ompl:" block here — that was a MoveIt 1 pattern.
+# The loader reads this file FLAT, so top-level keys are what move_group sees.
 # =============================================================================
 
-# ── Primary pipeline: Pilz + Ruckig ──────────────────────────────────────────
-planning_plugin: pilz_industrial_motion_planner/CommandPlanner
+planning_plugin: ompl_interface/OMPLPlanner
 
 request_adapters: >-
     default_planner_request_adapters/AddRuckigTrajectorySmoothing
@@ -24,30 +19,70 @@ request_adapters: >-
     default_planner_request_adapters/FixStartStateCollision
     default_planner_request_adapters/FixStartStatePathConstraints
 
-# Ruckig smoothing iterations — more = smoother corners, but slightly longer
-# planning time. 3 iterations is sufficient for industrial repeatability.
-smoothing_type: 2        # 1 = TimeOptimalTrajectoryGeneration, 2 = Ruckig
+start_state_max_bounds_error: 0.1
 
-# ── OMPL pipeline (named fallback) ───────────────────────────────────────────
-# Use this for obstacle-aware planning or when Pilz cannot find a path.
-# Switch at runtime: set planning_pipeline="ompl" in your MoveGroup request.
-ompl:
-  planning_plugin: ompl_interface/OMPLPlanner
-  request_adapters: >-
-      default_planner_request_adapters/AddRuckigTrajectorySmoothing
-      default_planner_request_adapters/FixWorkspaceBounds
-      default_planner_request_adapters/FixStartStateBounds
-      default_planner_request_adapters/FixStartStateCollision
-      default_planner_request_adapters/FixStartStatePathConstraints
-  start_state_max_bounds_error: 0.1
+# ── Planning group configuration ─────────────────────────────────────────────
+arm:
+  default_planner_config: RRTConnect
+  planner_configs:
+    - SBLkConfigDefault
+    - ESTkConfigDefault
+    - LBKPIECEkConfigDefault
+    - BKPIECEkConfigDefault
+    - KPIECEkConfigDefault
+    - RRTkConfigDefault
+    - RRTConnectkConfigDefault
+    - RRTstarkConfigDefault
+    - TRRTkConfigDefault
+    - PRMkConfigDefault
+    - PRMstarkConfigDefault
+  projection_evaluator: joints(Revolute_1,Revolute_2)
+  longest_valid_segment_fraction: 0.005
 
-  arm:
-    default_planner_config: RRTConnect
-    planner_configs:
-      - RRTConnect
-    projection_evaluator: joints(Revolute_1,Revolute_2)
-    longest_valid_segment_fraction: 0.005
-
-  RRTConnect:
-    type: geometric::RRTConnect
-    range: 0.0
+# ── Planner definitions ───────────────────────────────────────────────────────
+SBLkConfigDefault:
+  type: geometric::SBL
+  range: 0.0
+ESTkConfigDefault:
+  type: geometric::EST
+  range: 0.0
+  goal_bias: 0.05
+LBKPIECEkConfigDefault:
+  type: geometric::LBKPIECE
+  range: 0.0
+  border_fraction: 0.9
+  min_valid_path_fraction: 0.5
+BKPIECEkConfigDefault:
+  type: geometric::BKPIECE
+  range: 0.0
+  border_fraction: 0.9
+  failed_expansion_score_factor: 0.5
+  min_valid_path_fraction: 0.5
+KPIECEkConfigDefault:
+  type: geometric::KPIECE
+  range: 0.0
+  goal_bias: 0.05
+  border_fraction: 0.9
+  failed_expansion_score_factor: 0.5
+  min_valid_path_fraction: 0.5
+RRTkConfigDefault:
+  type: geometric::RRT
+  range: 0.0
+  goal_bias: 0.05
+RRTConnectkConfigDefault:
+  type: geometric::RRTConnect
+  range: 0.0
+RRTstarkConfigDefault:
+  type: geometric::RRTstar
+  range: 0.0
+  goal_bias: 0.05
+  delay_collision_checking: 1
+TRRTkConfigDefault:
+  type: geometric::TRRT
+  range: 0.0
+  goal_bias: 0.05
+PRMkConfigDefault:
+  type: geometric::PRM
+  max_nearest_neighbors: 10
+PRMstarkConfigDefault:
+  type: geometric::PRMstar
