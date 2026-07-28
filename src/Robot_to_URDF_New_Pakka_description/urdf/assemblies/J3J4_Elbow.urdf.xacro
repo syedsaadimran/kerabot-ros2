@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="J3J4_Elbow_macro">
+
+  <xacro:macro name="J3J4_Elbow" params="prefix">
+
+    <!-- Links -->
+    <link name="${prefix}J2J3_Shoulder">
+      <inertial>
+        <origin xyz="0.051916 -0.000049 0.158128" rpy="0 0 0"/>
+        <mass value="3.446640"/>
+        <inertia ixx="4.362083e-02" ixy="9.815616e-07" ixz="-1.144201e-03"
+                 iyy="4.371374e-02" iyz="1.314195e-05" izz="4.606072e-03"/>
+      </inertial>
+      <visual>
+        <origin xyz="0.053972 0.000000 0.077000" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://Robot_to_URDF_New_Pakka_description/meshes/J3J4_Elbow/J2J3_Shoulder.dae" scale="1 1 1"/>
+        </geometry>
+        <material name="Steel"/>
+      </visual>
+      <collision>
+        <origin xyz="0.053972 0.000000 0.077000" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://Robot_to_URDF_New_Pakka_description/meshes/J3J4_Elbow/J2J3_Shoulder_collision.stl" scale="0.01 0.01 0.01"/>
+        </geometry>
+      </collision>
+    </link>
+
+  </xacro:macro>
+
+</robot>

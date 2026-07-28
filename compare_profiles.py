@@ -168,7 +168,7 @@ def plot_stats_comparison(results):
     joint_x     = np.arange(5)
 
     fig = plt.figure(figsize=(20, 14), facecolor=BG)
-    fig.suptitle("Kerabot — Scaling Factor Stats Comparison  (Pilz PTP)",
+    fig.suptitle("Kerabot — Scaling Factor Stats Comparison  (Pilz PTP + Ruckig Smoothing)",
                  fontsize=14, color=TCOL, fontweight="bold", y=0.99)
 
     gs = gridspec.GridSpec(2, 3, figure=fig, hspace=0.55, wspace=0.38,
@@ -342,7 +342,7 @@ def main():
     time.sleep(1.0)
 
     planner = "LIN" if args.cartesian else "PTP"
-    print(f"\nPlanner: Pilz {planner}")
+    print(f"\nPlanner: Pilz {planner} + Ruckig Smoothing")
     print(f"Target : {TARGET_POSITION}")
     print(f"Testing {len(COMBOS)} combinations...\n")
     print(f"{'#':<4} {'vel':<6} {'accel':<7} {'Waypts':<8} {'Duration':<10} {'AvgRMSJerk':<12} Status")

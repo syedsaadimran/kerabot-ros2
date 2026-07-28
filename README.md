@@ -1,7 +1,8 @@
 # Kerabot — 6DoF Robotic Arm Software Stack
 
 > A complete ROS2 + MoveIt2 software stack for the **Kerabot** 6-degree-of-freedom robotic arm,
-> featuring smooth trapezoidal motion planning with full 3D joint dynamics analysis (F=ma, τ=Iα).
+> featuring jerk-limited trapezoidal motion via **Pilz PTP + Ruckig smoothing**,
+> full 3D joint dynamics analysis (F=ma, τ=Iα), and an interactive validated motion planner.
 
 ---
 
@@ -23,14 +24,19 @@
    - [View Robot Only (no MoveIt)](#view-robot-only-no-moveit)
    - [Move to a Pose](#move-to-a-pose)
    - [Run a Waypoint Sequence](#run-a-waypoint-sequence)
-5. [Smooth Trapezoidal Motion + Dynamics](#smooth-trapezoidal-motion--dynamics)
-   - [What Is Trapezoidal Planning?](#what-is-trapezoidal-planning)
-   - [Running the Dynamics Script](#running-the-dynamics-script)
-   - [Reading the Output](#reading-the-output)
-6. [Workspace Structure](#workspace-structure)
-7. [Configuration Reference](#configuration-reference)
-8. [Troubleshooting](#troubleshooting)
-9. [Changelog](#changelog)
+5. [Motion Planning Scripts](#motion-planning-scripts)
+   - [manual\_move.py — Interactive Validated Mover](#manual_movepy--interactive-validated-mover)
+   - [trapezoidal\_dynamics.py — Smooth Motion + 3D Dynamics](#trapezoidal_dynamicspy--smooth-motion--3d-dynamics)
+   - [smooth\_motion.py — Pilz+Ruckig Comparison Plotter](#smooth_motionpy--pilzruckig-comparison-plotter)
+   - [compare\_profiles.py — Speed/Accel Sweep](#compare_profilespy--speedaccel-sweep)
+   - [sweep\_speeds.py — Quick Speed Sweep](#sweep_speedspy--quick-speed-sweep)
+   - [plot\_trajectory.py — 4-Panel Profile Plot](#plot_trajectorypy--4-panel-profile-plot)
+6. [Pilz PTP + Ruckig Smoothing](#pilz-ptp--ruckig-smoothing)
+7. [Using RViz MotionPlanning Panel with Pilz](#using-rviz-motionplanning-panel-with-pilz)
+8. [Workspace Structure](#workspace-structure)
+9. [Configuration Reference](#configuration-reference)
+10. [Troubleshooting](#troubleshooting)
+11. [Changelog](#changelog)
 
 ---
 
@@ -64,22 +70,36 @@ kerabot_ws/
 │   ├── kerabot_moveit_config/     # MoveIt2 config (planners, limits, controllers)
 │   ├── Robot_to_URDF_New_Pakka_description/
 │   └── pymoveit2/                 # Python MoveIt2 wrapper (submodule)
-├── trapezoidal_dynamics.py        # ← Main dynamics + smooth motion script
-├── move_to_pose.py                # Single pose command
-├── move_sequence.py               # Chained waypoint sequence
-├── plot_trajectory.py             # Plot all joint profiles from MoveIt plan
-└── sweep_speeds.py                # Compare profiles at different speed scales
+├── trapezoidal_dynamics.py        ← Main dynamics + smooth motion script
+├── manual_move.py                 ← Interactive validated mover (NEW)
+├── smooth_motion.py               ← Pilz+Ruckig comparison plotter (NEW)
+├── compare_profiles.py            ← Speed/accel sweep comparison
+├── move_to_pose.py                ← Single pose command
+├── move_sequence.py               ← Chained waypoint sequence
+├── plot_trajectory.py             ← Plot all joint profiles from MoveIt plan
+└── sweep_speeds.py                ← Compare profiles at different speed scales
 ```
 
-**Planning pipeline:**
+**Planning pipeline (updated):**
 ```
-Pilz PTP / LIN  ──►  joint_limits.yaml (vel + accel + jerk)  ──►  arm_controller
-     ↑
- (trapezoidal profile guaranteed — no post-processing needed)
+ Pilz PTP / LIN
+      │
+      ▼
+ AddRuckigTrajectorySmoothing  ←── NEW: rounds sharp ramp corners into S-curves
+      │                                enforces jerk limits from joint_limits.yaml
+      ▼
+ joint_limits.yaml  (vel + accel + jerk caps)
+      │
+      ▼
+ arm_controller (FollowJointTrajectory)
 
-OMPL RRTConnect  ──►  Ruckig smoothing  ──►  arm_controller
-     ↑
- (fallback for cluttered environments)
+ OMPL RRTConnect (fallback)
+      │
+      ▼
+ AddRuckigTrajectorySmoothing
+      │
+      ▼
+ arm_controller
 ```
 
 ---
@@ -338,7 +358,169 @@ Revolute_5        0.0091   ✅      0.1293    0.3900      ✅ Yes
 
 ---
 
-## Workspace Structure
+## Motion Planning Scripts
+
+### manual_move.py — Interactive Validated Mover
+
+Move the robot to any position with full 4-step validation before any motion happens.
+
+```bash
+# Cartesian pose: x y z roll(deg) pitch(deg) yaw(deg)
+python3 manual_move.py --pose 0.0 -0.06 0.65 0 90 0
+
+# Direct joint angles (radians)
+python3 manual_move.py --joint 0.3 -0.5 0.4 0.0 0.2
+
+# Return to home
+python3 manual_move.py --home
+
+# Slower speed
+python3 manual_move.py --pose 0.0 -0.06 0.65 0 90 0 --vel 0.3 --accel 0.2
+
+# Dry-run (plan only, never execute)
+python3 manual_move.py --pose 0.0 -0.06 0.65 0 90 0 --dry-run
+
+# Auto-confirm (no prompt, for automated workflows)
+python3 manual_move.py --pose 0.0 -0.06 0.65 0 90 0 --yes
+```
+
+**Validation steps (in order):**
+1. **Input check** — workspace bounding box, joint angle range check
+2. **IK / planning dry-run** — MoveIt verifies the pose is reachable; shows waypoints + duration
+3. **User confirmation** — prompts `Execute? [y/N]` before any motion
+4. **Post-move verification** — reads back joint states, compares to target, reports PASS/WARN
+
+---
+
+### trapezoidal_dynamics.py — Smooth Motion + 3D Dynamics
+
+Main dynamics script. Plans motion with Pilz PTP, computes 3D torques and forces.
+
+```bash
+# Dry run (plan + plot, robot doesn't move)
+python3 trapezoidal_dynamics.py --home
+
+# Execute on the robot
+python3 trapezoidal_dynamics.py --home --execute
+
+# Slower speed
+python3 trapezoidal_dynamics.py --home --vel 0.3 --accel 0.2
+
+# Cartesian straight-line instead of joint-space
+python3 trapezoidal_dynamics.py --home --cartesian
+```
+
+---
+
+### smooth_motion.py — Pilz+Ruckig Comparison Plotter
+
+Plans the motion at multiple velocity/acceleration combos and generates detailed
+velocity + jerk comparison plots showing the effect of Ruckig smoothing.
+
+```bash
+# Sweep all 5 combos (dry-run, plot only)
+python3 smooth_motion.py --home
+
+# Execute the balanced combo (vel=0.5, accel=0.3)
+python3 smooth_motion.py --home --execute
+
+# Single custom combo
+python3 smooth_motion.py --home --vel 0.4 --accel 0.25
+```
+
+Output files:
+- `~/kerabot_ws/ruckig_comparison.png` — velocity + jerk per joint for all combos
+- `~/kerabot_ws/ruckig_stats.png` — duration/jerk/velocity bar charts + recommendation
+
+---
+
+### compare_profiles.py — Speed/Accel Sweep
+
+Detailed sweep: velocity trapezoidal shape + statistics comparison.
+
+```bash
+# Ensure robot is NOT at the target first:
+python3 trapezoidal_dynamics.py --home
+python3 compare_profiles.py
+```
+
+Output: `profile_comparison.png`, `stats_comparison.png`
+
+---
+
+### sweep_speeds.py — Quick Speed Sweep
+
+Quick comparison of 5 speed presets. Most-active joint is plotted per combo.
+
+```bash
+python3 sweep_speeds.py
+```
+
+Output: `speed_sweep_plot.png`
+
+---
+
+### plot_trajectory.py — 4-Panel Profile Plot
+
+Plans to the default target, plots position / velocity / acceleration / jerk for all 5 joints.
+
+```bash
+python3 plot_trajectory.py
+```
+
+Output: `trajectory_plot.png`
+
+---
+
+## Pilz PTP + Ruckig Smoothing
+
+### What is this?
+
+| Layer | What it does |
+|---|---|
+| **Pilz PTP** | Generates the path geometry: trapezoidal velocity shape, synchronised joints |
+| **Ruckig** | Post-processes the trajectory: rounds the sharp velocity corners into S-curves by enforcing jerk limits |
+| **Result** | Jerk-limited, trapezoidal-shaped motion — no mechanical shock at ramp transitions |
+
+### Why does it matter?
+
+Without Ruckig, a Pilz PTP trajectory has **hard edges** at the ramp-up and ramp-down points
+(the corners of the trapezoid). These cause sudden changes in acceleration, which appear as
+mechanical jerk and vibration in the physical robot.
+
+Ruckig enforces your jerk limits from `joint_limits.yaml` (e.g. `max_jerk: 10.0` for Revolute_3)
+to produce smooth S-curve transitions while keeping the overall trapezoidal shape.
+
+### Where is it configured?
+
+`src/kerabot_moveit_config/config/ompl_planning.yaml`:
+```yaml
+planning_plugin: pilz_industrial_motion_planner/CommandPlanner
+request_adapters: >-
+    default_planner_request_adapters/AddRuckigTrajectorySmoothing  # <- this line
+    default_planner_request_adapters/FixWorkspaceBounds
+    ...
+```
+
+The jerk limits that Ruckig uses come from `joint_limits.yaml`.
+
+---
+
+## Using RViz MotionPlanning Panel with Pilz
+
+When MoveIt launches with RViz, the MotionPlanning panel defaults to OMPL.
+To use Pilz (required for smooth trapezoidal profiles via the GUI):
+
+1. In the **MotionPlanning** panel (left side), find **Planning Library**
+2. Set **Pipeline** to: `pilz_industrial_motion_planner`
+3. Set **Planner** to: `PTP` (or `LIN` for straight-line)
+4. Drag the interactive marker to a target pose
+5. Click **Plan** then **Execute**
+
+> **Note:** Pilz requires a clear, collision-free path. If planning fails in the GUI,
+> try clicking "Update" to refresh the start state, or use `python3 manual_move.py` instead.
+
+---
 
 ```
 kerabot_ws/
@@ -353,7 +535,7 @@ kerabot_ws/
 │   │
 │   ├── kerabot_moveit_config/
 │   │   ├── config/
-│   │   │   ├── ompl_planning.yaml      ← Pilz PTP as default planner ★
+│   │   │   ├── ompl_planning.yaml      ← Pilz PTP + Ruckig pipeline ★
 │   │   │   ├── joint_limits.yaml       ← Physics-derived jerk limits ★
 │   │   │   ├── moveit_controllers.yaml
 │   │   │   ├── ros2_controllers.yaml
@@ -365,12 +547,15 @@ kerabot_ws/
 │   │
 │   └── pymoveit2/                      ← Python MoveIt2 interface
 │
-├── trapezoidal_dynamics.py             ← Smooth motion + 3D dynamics ★
-├── move_to_pose.py                     ← Single pose command
-├── move_sequence.py                    ← Waypoint sequence
-├── plot_trajectory.py                  ← Plot joint profiles
-├── sweep_speeds.py                     ← Compare speed scaling
-├── fix_rviz.sh                         ← RViz display fix for WSL
+├── trapezoidal_dynamics.py         ← Smooth motion + 3D dynamics ★
+├── manual_move.py                  ← Interactive validated mover ★ (NEW)
+├── smooth_motion.py                ← Pilz+Ruckig comparison plots ★ (NEW)
+├── compare_profiles.py             ← Speed/accel sweep comparison
+├── move_to_pose.py                 ← Single pose command
+├── move_sequence.py                ← Waypoint sequence
+├── plot_trajectory.py              ← Plot joint profiles (4 panels)
+├── sweep_speeds.py                 ← Compare speed scaling presets
+├── fix_rviz.sh                     ← RViz display fix for WSL
 └── .gitignore
 ```
 
@@ -466,9 +651,39 @@ rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 ```
 
+### Pilz planning fails in RViz GUI
+
+- In the MotionPlanning panel, set **Pipeline = pilz_industrial_motion_planner** and **Planner = PTP**
+- Click **Update** to refresh the start state before planning
+- Alternatively, use `python3 manual_move.py --pose ...` which does full validation before executing
+
+### `python3 manual_move.py` fails with "Planning failed"
+
+```bash
+# The position may be outside workspace bounds:
+# WS limits: x=[-0.70, 0.70]  y=[-0.70, 0.70]  z=[0.05, 1.10]
+
+# Try a known-good position:
+python3 manual_move.py --pose 0.0 -0.06 0.65 0 90 0
+
+# Or check if MoveIt is running:
+ros2 node list | grep move_group
+```
+
 ---
 
 ## Changelog
+
+### v1.2.0 — Ruckig Smoothing + Script Audit
+- **Added** Ruckig jerk-limiting to Pilz primary pipeline (`ompl_planning.yaml`)
+- **Added** `manual_move.py` — 4-step validated interactive mover with workspace check, IK dry-run, confirmation, and post-move verification
+- **Added** `smooth_motion.py` — Pilz+Ruckig multi-speed comparison plotter (velocity + jerk panels)
+- **Fixed** `move_to_pose.py` — was using OMPL pipeline; now uses Pilz PTP
+- **Fixed** `move_sequence.py` — no pipeline was set; now uses Pilz PTP
+- **Fixed** `plot_trajectory.py` — OMPL → Pilz PTP; added jerk panel; dark theme
+- **Fixed** `sweep_speeds.py` — OMPL randomized → Pilz PTP deterministic; added jerk panel
+- **Updated** `compare_profiles.py` — titles updated for Ruckig
+- **Updated** README with new scripts, Ruckig explanation, and RViz Pilz fix guide
 
 ### v1.1.0 — Trapezoidal Motion + Dynamics
 - **Added** `trapezoidal_dynamics.py` — Pilz PTP planner with 3D torque (τ=Iα) and force (F=ma) analysis

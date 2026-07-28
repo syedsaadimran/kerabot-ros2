@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="J6_holder_macro">
+
+  <xacro:macro name="J6_holder" params="prefix">
+
+    <!-- Links -->
+    <link name="${prefix}L70IE_Finger">
+      <inertial>
+        <origin xyz="0.129200 -0.000053 0.034929" rpy="0 0 0"/>
+        <mass value="1.714129"/>
+        <inertia ixx="2.168825e-03" ixy="-1.977919e-06" ixz="-9.238266e-04"
+                 iyy="4.945738e-03" iyz="2.017023e-06" izz="4.814753e-03"/>
+      </inertial>
+      <visual>
+        <origin xyz="0.109800 -0.000000 0.050000" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://Robot_to_URDF_New_Pakka_description/meshes/J6_holder/L70IE_Finger.dae" scale="1 1 1"/>
+        </geometry>
+        <material name="Stainless_Steel_304"/>
+      </visual>
+      <collision>
+        <origin xyz="0.109800 -0.000000 0.050000" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://Robot_to_URDF_New_Pakka_description/meshes/J6_holder/L70IE_Finger_collision.stl" scale="0.01 0.01 0.01"/>
+        </geometry>
+      </collision>
+    </link>
+
+  </xacro:macro>
+
+</robot>

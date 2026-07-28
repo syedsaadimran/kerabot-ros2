@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="Robot_to_URDF_New_Pakka">
+
+  <!-- Materials (shared across all assemblies) -->
+  <material name="Steel">
+    <color rgba="0.541 0.596 0.749 1.0"/>
+  </material>
+  <material name="Stainless_Steel_304">
+    <color rgba="0.541 0.596 0.749 1.0"/>
+  </material>
+
+  <!-- Assembly includes -->
+  <xacro:include filename="$(find Robot_to_URDF_New_Pakka_description)/urdf/assemblies/J3J4_Elbow.urdf.xacro"/>
+  <xacro:include filename="$(find Robot_to_URDF_New_Pakka_description)/urdf/assemblies/J6_holder.urdf.xacro"/>
+  <xacro:include filename="$(find Robot_to_URDF_New_Pakka_description)/urdf/assemblies/Robot_Assembly_URDF_New.urdf.xacro"/>
+
+  <!-- Instantiate assemblies -->
+  <xacro:J3J4_Elbow prefix=""/>
+  <xacro:J6_holder prefix=""/>
+  <xacro:Robot_Assembly_URDF_New prefix=""/>
+
+  <!-- Mount joints (cross-assembly connections) -->
+  <!-- These define how assemblies connect to each other. -->
+  <!-- When swapping a dummy assembly with a real part, -->
+  <!-- update the include + macro call above, and adjust -->
+  <!-- parent/child link names in the mount joint below. -->
+
+  <joint name="Revolute_3" type="continuous">
+    <parent link="L110I_shoulder_2"/>
+    <child link="J2J3_Shoulder"/>
+    <origin xyz="0.000000 0.426000 0.003028" rpy="-1.570796 -1.570796 0.000000"/>
+    <axis xyz="-1.000000 0.000000 -0.000000"/>
+    <limit effort="100.0" velocity="1.00"/>
+  </joint>
+
+  <joint name="Revolute_4" type="continuous">
+    <parent link="J2J3_Shoulder"/>
+    <child link="Wrist_Motor"/>
+    <origin xyz="0.053972 0.000000 0.314000" rpy="0.000000 0.000000 0.000000"/>
+    <axis xyz="-0.000000 0.000000 1.000000"/>
+    <limit effort="100.0" velocity="1.00"/>
+  </joint>
+
+  <joint name="Revolute_5" type="continuous">
+    <parent link="Wrist_Motor"/>
+    <child link="L70IE_Finger"/>
+    <origin xyz="0.059500 0.000000 0.130000" rpy="-0.000787 -1.570796 0.002101"/>
+    <axis xyz="-0.000000 0.000000 1.000000"/>
+    <limit effort="100.0" velocity="1.00"/>
+  </joint>
+
+  <!-- ROS 2 control: generated generic system -->
+  <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
+    <hardware>
+      <plugin>mock_components/GenericSystem</plugin>
+      <param name="cmd_topic">sim/Robot_to_URDF_New_Pakka_system/cmd</param>
+      <param name="state_topic">sim/Robot_to_URDF_New_Pakka_system/state</param>
+    </hardware>
+
+    <joint name="Revolute_3">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="Revolute_4">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="Revolute_5">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+
+</robot>

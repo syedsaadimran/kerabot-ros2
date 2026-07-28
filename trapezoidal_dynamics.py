@@ -53,8 +53,8 @@ END_EFFECTOR     = "L70IE_Finger"
 MOVE_GROUP       = "arm"
 
 # Target pose (edit to your desired goal)
-TARGET_POSITION  = [0.0, -0.0595, 0.65]
-TARGET_QUAT_XYZW = [-0.4997, -0.5003, -0.4997, 0.5003]
+TARGET_POSITION  = [0.15, 0.15, 0.35]
+TARGET_QUAT_XYZW = [0.0, 0.7071, 0.0, 0.7071]
 
 # Output plot path
 PLOT_PATH = "/home/saad/kerabot_ws/trapezoidal_dynamics_plot.png"
