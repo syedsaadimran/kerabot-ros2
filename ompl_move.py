@@ -117,7 +117,6 @@ def main():
         moveit2.move_to_pose(
             position=[x, y, z],
             quat_xyzw=None,         # position-only goal — IK chooses orientation
-            tolerance_pos=args.tolerance,
             cartesian=False,
         )
         moveit2.wait_until_executed()
@@ -127,7 +126,6 @@ def main():
         traj = moveit2.plan(
             position=[x, y, z],
             quat_xyzw=None,         # position-only goal
-            tolerance_pos=args.tolerance,
             cartesian=False,
         )
         if traj is None:

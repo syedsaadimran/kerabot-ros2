@@ -1,25 +1,18 @@
 # =============================================================================
 # ompl_planning.yaml — OMPL Pipeline Configuration for Kerabot MoveIt2
-#
-# IMPORTANT: This file is loaded by moveit_configs_utils.planning_pipelines()
-# when pipelines=["ompl", ...] is specified in demo.launch.py.
-# The ENTIRE FILE is the config for the "ompl" pipeline.
-# Keys here become ROS parameters under /move_group/ompl.*
-#
-# Do NOT nest a second "ompl:" block here — that was a MoveIt 1 pattern.
-# The loader reads this file FLAT, so top-level keys are what move_group sees.
 # =============================================================================
 
 planning_plugin: ompl_interface/OMPLPlanner
+start_state_max_bounds_error: 0.1
+jiggle_fraction: 0.05
 
 request_adapters: >-
-    default_planner_request_adapters/AddRuckigTrajectorySmoothing
+    default_planner_request_adapters/AddTimeOptimalParameterization
+    default_planner_request_adapters/ResolveConstraintFrames
     default_planner_request_adapters/FixWorkspaceBounds
     default_planner_request_adapters/FixStartStateBounds
     default_planner_request_adapters/FixStartStateCollision
     default_planner_request_adapters/FixStartStatePathConstraints
-
-start_state_max_bounds_error: 0.1
 
 # ── Planning group configuration ─────────────────────────────────────────────
 arm:
