@@ -42,8 +42,8 @@ END_EFFECTOR = "L70IE_Finger"
 MOVE_GROUP   = "arm"
 HOME         = [0.0, 0.0, 0.0, 0.0, 0.0]
 
-# Pick height above table (10cm above Z=0.0m)
-PICK_Z = 0.10
+# Pick height above table (22cm above Z=0.0m to account for finger link length)
+PICK_Z = 0.22
 
 # Generate 16 pick/place targets across workspace radii (0.30m to 0.60m) and angles (-120° to +120°)
 PICK_TARGETS = [
@@ -67,95 +67,121 @@ PICK_TARGETS = [
 ]
 
 
-# ── Forward Kinematics (FK) for Kerabot 5-DOF ────────────────────────────────
-def fk_kerabot(q):
+# ── Forward Kinematics (FK) with Intermediate Link Z Positions ─────────────────
+def fk_kerabot_full(q):
     """
-    Computes end-effector position (3,) and tool Z-axis direction vector (3,)
-    for joint angles q = [q1, q2, q3, q4, q5] in radians.
-    Matches exact URDF offsets & joint axes.
+    Computes positions of all intermediate links + end-effector and tool Z-dir.
+    Used for collision checking and Z-clearance verification.
     """
     q1, q2, q3, q4, q5 = q
 
-    # Joint 1: Base yaw (axis [0, 1, 0] in URDF rpy="-1.570796 0 0")
-    # Base link -> L110I_Shoulder
+    # Joint 1: Base yaw
     T1 = np.eye(4)
     T1[:3, 3] = [0.0, 0.0, 0.08]
-    # rpy="-1.570796 0 0"
     R_j1_base = R.from_euler('xyz', [-np.pi/2, 0, 0]).as_matrix()
     R_j1_rot  = R.from_euler('xyz', [0, q1, 0]).as_matrix()
     T1[:3, :3] = R_j1_base @ R_j1_rot
+    pos_link1 = T1[:3, 3]
 
-    # Joint 2: Shoulder pitch (L110I_Shoulder -> L110I_shoulder_2)
+    # Joint 2: Shoulder pitch
     T2 = np.eye(4)
     T2[:3, 3] = [0.0, -0.119, 0.057]
     R_j2_base = R.from_euler('xyz', [np.pi, 0, 0]).as_matrix()
     R_j2_rot  = R.from_euler('xyz', [0, 0, q2]).as_matrix()
     T2[:3, :3] = R_j2_base @ R_j2_rot
+    T12 = T1 @ T2
+    pos_link2 = T12[:3, 3]
 
-    # Joint 3: Elbow pitch (L110I_shoulder_2 -> J2J3_Shoulder)
+    # Joint 3: Elbow pitch
     T3 = np.eye(4)
     T3[:3, 3] = [0.0, 0.426, 0.003028]
     R_j3_base = R.from_euler('xyz', [-np.pi/2, -np.pi/2, 0]).as_matrix()
     R_j3_rot  = R.from_euler('xyz', [-q3, 0, 0]).as_matrix()
     T3[:3, :3] = R_j3_base @ R_j3_rot
+    T123 = T12 @ T3
+    pos_link3 = T123[:3, 3]
 
-    # Joint 4: Wrist roll (J2J3_Shoulder -> Wrist_Motor)
+    # Joint 4: Wrist roll
     T4 = np.eye(4)
     T4[:3, 3] = [0.053972, 0.0, 0.314]
     R_j4_rot  = R.from_euler('xyz', [0, 0, q4]).as_matrix()
     T4[:3, :3] = R_j4_rot
+    T1234 = T123 @ T4
+    pos_link4 = T1234[:3, 3]
 
-    # Joint 5: Wrist pitch (Wrist_Motor -> L70IE_Finger)
+    # Joint 5: Wrist pitch
     T5 = np.eye(4)
     T5[:3, 3] = [0.0595, 0.0, 0.130]
     R_j5_base = R.from_euler('xyz', [-0.000787, -np.pi/2, 0.002101]).as_matrix()
     R_j5_rot  = R.from_euler('xyz', [0, 0, q5]).as_matrix()
     T5[:3, :3] = R_j5_base @ R_j5_rot
+    T_total = T1234 @ T5
+    pos_ee = T_total[:3, 3]
+    tool_z = T_total[:3, 2]
 
-    # Full transform: T = T1 * T2 * T3 * T4 * T5
-    T_total = T1 @ T2 @ T3 @ T4 @ T5
-    pos = T_total[:3, 3]
-    tool_z = T_total[:3, 2]  # Z-axis of tool in base_link frame
-    return pos, tool_z, T_total
+    return pos_ee, tool_z, [pos_link1, pos_link2, pos_link3, pos_link4]
 
 
 def optimize_top_down_ik(target_xyz):
     """
-    Finds q = [q1..q5] that minimizes position error to target_xyz
+    Finds collision-free q = [q1..q5] that minimizes position error to target_xyz
     AND orientation error relative to straight-down [0, 0, -1].
+    Includes link Z clearance penalties (Z > 0.02m) to prevent ground collisions.
     """
     target_pos = np.array(target_xyz)
     target_z_dir = np.array([0.0, 0.0, -1.0])
 
     def objective(q):
-        pos, tool_z, _ = fk_kerabot(q)
-        pos_err = np.linalg.norm(pos - target_pos)
+        pos_ee, tool_z, links = fk_kerabot_full(q)
+        pos_err = np.linalg.norm(pos_ee - target_pos)
+
         # Orientation cost: 1 - dot(tool_z, [0,0,-1])
         dot_val = np.clip(np.dot(tool_z, target_z_dir), -1.0, 1.0)
         ori_err = 1.0 - dot_val
-        # Heavily weight position so position accuracy is primary, orientation secondary
-        return 100.0 * pos_err**2 + 5.0 * ori_err
 
-    # Joint limits [-2.9, 2.9]
+        # Ground clearance penalties for all links (Z must be > 0.02m)
+        g_pen = 0.0
+        for l_pos in links:
+            if l_pos[2] < 0.03:
+                g_pen += 500.0 * (0.03 - l_pos[2])**2
+
+        # Joint limit soft penalties
+        j_pen = 0.0
+        for q_i, (lo, hi) in zip(q, [(-2.9, 2.9)] * 5):
+            if q_i < lo: j_pen += 100.0 * (lo - q_i)**2
+            if q_i > hi: j_pen += 100.0 * (q_i - hi)**2
+
+        return 1000.0 * pos_err**2 + 10.0 * ori_err + g_pen + j_pen
+
     bounds = [(-2.9, 2.9)] * 5
     best_q = None
     best_cost = float("inf")
 
-    # Multi-start initial guesses
-    for q1_guess in [math.atan2(target_xyz[0], -target_xyz[1]), 0.0]:
-        for q2_guess in [-0.5, -1.0, -1.5, 0.5]:
-            for q3_guess in [0.5, 1.0, 1.5, -0.5]:
-                q0 = [q1_guess, q2_guess, q3_guess, 0.0, 0.0]
-                res = minimize(objective, q0, method='L-BFGS-B', bounds=bounds)
-                if res.success and res.fun < best_cost:
-                    best_cost = res.fun
-                    best_q = res.x
+    # Fast multi-start initial guesses with upward elbow posture
+    q1_base = math.atan2(target_xyz[0], -target_xyz[1])
+    guesses = [
+        [q1_base, -0.6,  1.2, 0.0,  0.0],
+        [q1_base, -1.0,  1.6, 0.0, -0.5],
+        [q1_base, -0.4,  0.8, 0.0,  0.5],
+        [q1_base, -0.8,  1.4, 0.0,  0.0],
+    ]
+
+    for q0 in guesses:
+        res = minimize(objective, q0, method='L-BFGS-B', bounds=bounds, options={'maxiter': 50})
+        if res.success and res.fun < best_cost:
+            best_cost = res.fun
+            best_q = res.x
 
     if best_q is None:
         return None, 999.0, 999.0
 
-    pos_act, tool_z_act, _ = fk_kerabot(best_q)
+    pos_act, tool_z_act, links = fk_kerabot_full(best_q)
     pos_err = float(np.linalg.norm(pos_act - target_pos))
+
+    # Verify ground clearance
+    if any(l[2] < 0.01 for l in links):
+        return None, 999.0, 999.0
+
     dot_val = float(np.clip(np.dot(tool_z_act, target_z_dir), -1.0, 1.0))
     ori_err_deg = float(math.acos(dot_val) * (180.0 / math.pi))
 
