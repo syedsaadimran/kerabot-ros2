@@ -331,6 +331,7 @@ def main():
         group_name=MOVE_GROUP,
         callback_group=cb,
     )
+    moveit2.pipeline_id         = "pilz_industrial_motion_planner"
     moveit2.planner_id          = "LIN" if args.cartesian else "PTP"
     moveit2.num_planning_attempts = 10
     moveit2.allowed_planning_time = 10.0

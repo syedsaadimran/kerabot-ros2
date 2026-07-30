@@ -422,6 +422,7 @@ def main():
     # "PTP"  → joint-space trapezoidal (default, smoothest for point-to-point)
     # "LIN"  → Cartesian straight-line trapezoidal
     planner_id = "LIN" if args.cartesian else "PTP"
+    moveit2.pipeline_id         = "pilz_industrial_motion_planner"
     moveit2.planner_id          = planner_id
     moveit2.max_velocity        = args.vel
     moveit2.max_acceleration    = args.accel
