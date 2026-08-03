@@ -41,13 +41,13 @@ HOME         = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Continuous 8-waypoint trajectory (within valid collision-free bounds)
 CHAINED_WAYPOINTS = [
-    ("WP1 - Front Low",    [ 0.0, -1.0,  1.0,  0.0,  0.5]),
+    ("WP1 - Front Low",    [ 0.0, -0.6,  0.8,  0.0,  0.5]),
     ("WP2 - Left Reach",   [ 1.2, -0.8,  0.8,  0.5,  0.0]),
-    ("WP3 - Left High",    [ 1.2, -1.5,  1.2, -0.5, -0.5]),
+    ("WP3 - Left High",    [ 1.2, -0.8,  1.0, -0.5, -0.5]),
     ("WP4 - Right Reach",  [-1.2, -0.8,  0.8, -0.5,  0.0]),
-    ("WP5 - Right High",   [-1.2, -1.5,  1.2,  0.5,  0.5]),
+    ("WP5 - Right High",   [-1.2, -0.8,  1.0,  0.5,  0.5]),
     ("WP6 - Upright",      [ 0.0, -0.5,  0.5,  0.0,  0.0]),
-    ("WP7 - Twist Wrist",  [ 0.0, -1.0,  1.0,  2.5,  1.0]),
+    ("WP7 - Twist Wrist",  [ 0.0, -0.8,  1.0,  2.5,  1.0]),
     ("WP8 - Home",         [ 0.0,  0.0,  0.0,  0.0,  0.0]),
 ]
 
