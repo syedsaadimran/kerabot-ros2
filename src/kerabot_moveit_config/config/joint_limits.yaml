@@ -58,3 +58,12 @@ joint_limits:
     max_acceleration: 5.0
     has_jerk_limits: true
     max_jerk: 20.0
+
+  ee_rotation_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 6.0
+    has_jerk_limits: true
+    max_jerk: 25.0
+

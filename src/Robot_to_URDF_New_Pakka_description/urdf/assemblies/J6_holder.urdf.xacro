@@ -26,6 +26,44 @@
       </collision>
     </link>
 
+    <!-- 6th-axis active revolute joint on the top faceplate of the L70IE_Finger motor housing.
+         - Joint origin xyz="0.150 0 0.050" places joint frame on top circular face of motor.
+         - Orientation rpy="0 1.5708 0" points local Z outward along motor face normal. -->
+    <joint name="${prefix}ee_rotation_joint" type="revolute">
+      <parent link="${prefix}L70IE_Finger"/>
+      <child link="${prefix}end_effector_box_link"/>
+      <origin xyz="0.150 0 0.050" rpy="0 1.5708 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="3.14"/>
+    </joint>
+
+    <!-- End-effector box link: 0.329 x 0.267 x 0.100 m.
+         Visual/collision offset xyz="0 0 0.050" shifts box centroid by half height (+0.050 m)
+         so the bottom 0.329 x 0.267 m face sits flush on top of the motor faceplate. -->
+    <link name="${prefix}end_effector_box_link">
+      <inertial>
+        <origin xyz="0 0 0.050" rpy="0 0 0"/>
+        <mass value="1.2"/>
+        <inertia ixx="8.129e-03" ixy="0" ixz="0"
+                 iyy="1.182e-02" iyz="0" izz="1.795e-02"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0.050" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.329 0.267 0.100"/>
+        </geometry>
+        <material name="EE_Grey">
+          <color rgba="0.17 0.23 0.29 0.9"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.050" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.329 0.267 0.100"/>
+        </geometry>
+      </collision>
+    </link>
+
   </xacro:macro>
 
 </robot>

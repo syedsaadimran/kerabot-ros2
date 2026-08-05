@@ -1,7 +1,7 @@
 moveit_setup_assistant_config:
   urdf:
     package: Robot_to_URDF_New_Pakka_description
-    relative_path: urdf/Robot_to_URDF_New_Pakka.urdf
+    relative_path: urdf/Robot_to_URDF_New_Pakka.urdf.xacro
   srdf:
     relative_path: config/Robot_to_URDF_New_Pakka.srdf
   package_settings:
