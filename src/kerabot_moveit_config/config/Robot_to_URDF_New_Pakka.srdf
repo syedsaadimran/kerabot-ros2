@@ -31,7 +31,7 @@
     <disable_collisions link1="L110I_Shoulder" link2="L110I_shoulder_2" reason="Adjacent"/>
     <disable_collisions link1="L110I_Shoulder" link2="base_link" reason="Adjacent"/>
     <disable_collisions link1="L70IE_Finger" link2="Wrist_Motor" reason="Adjacent"/>
+    <!-- ONLY disable collisions between end_effector_box_link and its immediate adjacent parent flange (L70IE_Finger).
+         ALL other structural links (Wrist_Motor, J2J3_Shoulder, L110I_Shoulder, base_link) MUST be strictly checked for self-collisions. -->
     <disable_collisions link1="end_effector_box_link" link2="L70IE_Finger" reason="Adjacent"/>
-    <disable_collisions link1="end_effector_box_link" link2="Wrist_Motor" reason="Never"/>
-    <disable_collisions link1="end_effector_box_link" link2="J2J3_Shoulder" reason="Never"/>
 </robot>

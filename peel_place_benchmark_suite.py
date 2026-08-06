@@ -16,7 +16,8 @@ Features:
      - Stage 6: Release & Return Home (OMPL)
   3. Comparative Motion Pipeline Benchmark (OMPL + Ruckig, Pilz LIN + Ruckig, Pilz PTP + Ruckig)
   4. Speed Scaling Sweeps (0.2 -> 1.0 in 0.2 step increments)
-  5. Dynamics Logging: Execution Time, Planning Time, Peak Jerk (<5 rad/s³ target), Accel, Torques, Collision Pass/Fail
+  5. Dynamics & Safety Logging: Exception-guarded trajectory analysis, Peak Jerk (<5 rad/s³ target),
+     Strict Self-Collision Checking (Pass/Fail)
   6. Visual Analytics: Itemized Terminal Summary Table & Matplotlib comparative plots saved to ~/kerabot_ws/
 
 Usage:
@@ -72,7 +73,7 @@ CLEAR_Z   = 0.40                             # High clearance transfer height
 PEEL_DIST = 0.12                             # Retraction distance along peel vector (m)
 
 
-# ── 6-DoF Forward Kinematics Solver ───────────────────────────────────────────
+# ── 6-DoF Forward Kinematics & Self-Collision Checker ────────────────────────
 def fk_kerabot_6dof(q):
     q1, q2, q3, q4, q5, q6 = q
 
@@ -130,6 +131,29 @@ def fk_kerabot_6dof(q):
     return pos_ee, links, T_total
 
 
+def check_strict_self_collision(q):
+    """
+    Strict safety check verifying end_effector_box_link does NOT intersect
+    arm links (Wrist_Motor, J2J3_Shoulder, L110I_shoulder_2, L110I_Shoulder, base_link).
+    Returns True if clear (PASS), False if self-collision detected (FAIL).
+    """
+    pos_ee, links, _ = fk_kerabot_6dof(q)
+
+    # Ground clearance check (Z >= 0.02m)
+    if any(l[2] < 0.02 for l in links):
+        return False
+
+    # Proximity checks between EE box center (pos_ee) and arm joints
+    # Wrist_Motor is link 4, J2J3_Shoulder is link 3
+    d_wrist = np.linalg.norm(pos_ee - links[4])
+    d_elbow = np.linalg.norm(pos_ee - links[3])
+
+    if d_wrist < 0.10 or d_elbow < 0.14:
+        return False
+
+    return True
+
+
 # ── 6-DoF Numerical Inverse Kinematics (IK) Solver ───────────────────────────
 def solve_ik_6dof(target_xyz, target_pitch_deg=90.0, yaw_angle=0.0):
     target_pos = np.array(target_xyz)
@@ -166,7 +190,7 @@ def solve_ik_6dof(target_xyz, target_pitch_deg=90.0, yaw_angle=0.0):
             best_q = res.x
 
     pos_check, links_check, _ = fk_kerabot_6dof(best_q)
-    if np.linalg.norm(pos_check - target_pos) > 0.05 or any(l[2] < 0.02 for l in links_check):
+    if np.linalg.norm(pos_check - target_pos) > 0.05 or not check_strict_self_collision(best_q):
         return None
 
     return list(best_q)
@@ -192,16 +216,19 @@ def go_home(moveit2):
     time.sleep(0.3)
 
 
-# ── Trajectory Dynamics Analysis ─────────────────────────────────────────────
+# ── Trajectory Dynamics Analysis (Guarded against empty/short trajectories) ──
 def analyze_trajectory_dynamics(moveit2_node, joint_trajectory, dt=0.02):
     """
     Computes numerical derivatives (velocity, acceleration, jerk) and estimated torques
-    from a planned joint trajectory.
+    from a planned joint trajectory with strict safety guards for short/empty trajectories.
     """
-    if joint_trajectory is None or not joint_trajectory.points:
+    # ISSUE 1 FIX: Safety guard check before running dynamic calculations
+    if joint_trajectory is None or not hasattr(joint_trajectory, 'points') or len(joint_trajectory.points) < 2:
+        if moveit2_node is not None and hasattr(moveit2_node, 'get_logger'):
+            moveit2_node.get_logger().warn("Trajectory is empty or contains fewer than 2 waypoints. Skipping dynamics analysis.")
         return {
-            "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0,
-            "jerk_pass": True, "est_torque": 0.0, "time_series": None
+            "success": False, "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0,
+            "jerk_pass": False, "est_torque": 0.0, "time_series": None
         }
 
     points = joint_trajectory.points
@@ -217,9 +244,15 @@ def analyze_trajectory_dynamics(moveit2_node, joint_trajectory, dt=0.02):
     times = np.array(times)
     positions = np.array(positions)  # shape (n_pts, 6)
 
+    # Extra safety guard for array shape
+    if positions.size == 0 or len(positions) < 2 or times.size == 0:
+        return {
+            "success": False, "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0,
+            "jerk_pass": False, "est_torque": 0.0, "time_series": None
+        }
+
     # Ensure monotonic strictly increasing time array for differentiation
     if n_pts < 3 or (times[-1] - times[0]) <= 1e-4:
-        # Uniform resampling
         times = np.linspace(0, max(0.1, n_pts * dt), n_pts)
 
     # Compute numerical derivatives
@@ -242,6 +275,7 @@ def analyze_trajectory_dynamics(moveit2_node, joint_trajectory, dt=0.02):
     max_torque  = float(np.max(est_torques))
 
     return {
+        "success": True,
         "max_vel": max_vel,
         "max_accel": max_accel,
         "max_jerk": max_jerk,
@@ -287,32 +321,46 @@ class StickerPeelBenchmarkSuite:
         self.moveit2.num_planning_attempts     = 10
         self.moveit2.allowed_planning_time     = 5.0
 
+        # Strict Self-Collision Check before submitting plan
+        if not check_strict_self_collision(joint_target):
+            self.node.get_logger().error(f"Target pose for [{stage_name}] causes self-collision or ground violation! Rejecting plan.")
+            return {
+                "stage": stage_name, "success": False, "plan_ms": 0.0, "exec_s": 0.0,
+                "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
+                "est_torque": 0.0, "collision_pass": False, "time_series": None
+            }
+
         t_plan_start = time.time()
         traj = self.moveit2.plan(joint_positions=joint_target, joint_names=JOINT_NAMES)
         t_plan = (time.time() - t_plan_start) * 1000.0  # ms
 
-        if traj is None:
+        # ISSUE 1 FIX: Safety check on planned trajectory
+        if traj is None or not hasattr(traj, 'points') or len(traj.points) < 2:
             return {
                 "stage": stage_name, "success": False, "plan_ms": t_plan, "exec_s": 0.0,
                 "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
                 "est_torque": 0.0, "collision_pass": False, "time_series": None
             }
 
-        # Analyze planned trajectory dynamics
+        # Analyze planned trajectory dynamics cleanly
         dyn = analyze_trajectory_dynamics(self.node, traj)
+        if not dyn.get("success", False):
+            return {
+                "stage": stage_name, "success": False, "plan_ms": t_plan, "exec_s": 0.0,
+                "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
+                "est_torque": 0.0, "collision_pass": False, "time_series": None
+            }
 
         t_exec_start = time.time()
         self.moveit2.execute(traj)
         self.moveit2.wait_until_executed()
         t_exec = time.time() - t_exec_start
 
-        # Check ground clearance collision status from joint states
+        # ISSUE 2 FIX: Monitor joint states for continuous self-collision & ground clearance
         current_q = get_current_joints(self.moveit2)
         collision_pass = True
         if current_q is not None:
-            pos_ee, links, _ = fk_kerabot_6dof(current_q)
-            if any(l[2] < 0.02 for l in links):
-                collision_pass = False
+            collision_pass = check_strict_self_collision(current_q)
 
         return {
             "stage": stage_name, "success": True, "plan_ms": t_plan, "exec_s": t_exec,
@@ -329,20 +377,16 @@ class StickerPeelBenchmarkSuite:
         go_home(self.moveit2)
 
         # Compute targets for the 6-stage sequence
-        # Stage 1: Pre-Pick Approach (hover above pick)
         q_pre_pick = solve_ik_6dof([PICK_XYZ[0], PICK_XYZ[1], HOVER_Z])
-        # Stage 2: Sticker Contact
-        q_contact = solve_ik_6dof(PICK_XYZ)
-        # Stage 3: Peel Retraction Pose (angled lift @ peel_angle)
+        q_contact  = solve_ik_6dof(PICK_XYZ)
+
         rad_angle = math.radians(peel_angle_deg)
-        peel_xyz = PICK_XYZ + np.array([-PEEL_DIST * math.cos(rad_angle), 0.0, PEEL_DIST * math.sin(rad_angle)])
-        q_peel = solve_ik_6dof(peel_xyz, target_pitch_deg=90.0 - peel_angle_deg, yaw_angle=peel_angle_deg)
-        # Stage 4: High Clearance Transfer
+        peel_xyz  = PICK_XYZ + np.array([-PEEL_DIST * math.cos(rad_angle), 0.0, PEEL_DIST * math.sin(rad_angle)])
+        q_peel    = solve_ik_6dof(peel_xyz, target_pitch_deg=90.0 - peel_angle_deg, yaw_angle=peel_angle_deg)
+
         q_transfer = solve_ik_6dof([0.0, -0.35, CLEAR_Z])
-        # Stage 5: Target Surface Placement Contact
-        q_place = solve_ik_6dof(PLACE_XYZ)
-        # Stage 6: Return Home
-        q_home = HOME
+        q_place    = solve_ik_6dof(PLACE_XYZ)
+        q_home     = HOME
 
         stages = [
             ("Stage 1: Pre-Pick Approach", q_pre_pick, "ompl", "RRTConnect"),
@@ -356,7 +400,12 @@ class StickerPeelBenchmarkSuite:
         stage_metrics = []
         for name, q_t, pid, plid in stages:
             if q_t is None:
-                print(f"  ❌ {name:30s} -> IK Solver Failed to find valid pose")
+                print(f"  ❌ {name:30s} -> IK Solver / Self-Collision Check Rejected Target Pose")
+                stage_metrics.append({
+                    "stage": name, "success": False, "plan_ms": 0.0, "exec_s": 0.0,
+                    "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
+                    "est_torque": 0.0, "collision_pass": False, "time_series": None
+                })
                 continue
             res = self.run_stage_motion(name, q_t, pid, plid, vel_scale, accel_scale)
             stage_metrics.append(res)
@@ -364,7 +413,6 @@ class StickerPeelBenchmarkSuite:
             jerk_str = f"{res['max_jerk']:.2f} rad/s³ (" + ("PASS" if res['jerk_pass'] else "HIGH") + ")"
             print(f"  {status_symbol} {name:30s} | Plan: {res['plan_ms']:5.1f}ms | Exec: {res['exec_s']:4.2f}s | Jerk: {jerk_str}")
 
-        # Aggregate run metrics
         total_plan_ms  = sum(r["plan_ms"] for r in stage_metrics)
         total_exec_s   = sum(r["exec_s"] for r in stage_metrics)
         max_jerk       = max((r["max_jerk"] for r in stage_metrics), default=0.0)
@@ -372,7 +420,7 @@ class StickerPeelBenchmarkSuite:
         max_vel        = max((r["max_vel"] for r in stage_metrics), default=0.0)
         max_torque     = max((r["est_torque"] for r in stage_metrics), default=0.0)
         all_collisions = all(r["collision_pass"] for r in stage_metrics)
-        all_jerk_pass  = max_jerk < 5.0
+        all_jerk_pass  = max_jerk < 5.0 and max_jerk > 0.0
 
         run_summary = {
             "angle": peel_angle_deg, "pipeline": pipe_label, "scale": vel_scale,
@@ -392,7 +440,6 @@ class StickerPeelBenchmarkSuite:
         print("                GENERATING COMPARATIVE VISUAL ANALYTICS                  ")
         print("=========================================================================")
 
-        # Plot 1: Velocity & Acceleration Scaling Curves across Peel Angles
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         fig.suptitle("6-DoF Kerabot Arm: Peeling Trajectory Dynamics & Jerk Benchmark", fontsize=14, fontweight='bold')
 
@@ -428,7 +475,6 @@ class StickerPeelBenchmarkSuite:
         plt.close()
         print(f"  📊 Saved summary plot: {p1_path}")
 
-        # Plot 2: Speed Scaling Sweeps (Velocity, Accel, Jerk vs Scaling Factor)
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(16, 5))
         fig.suptitle("Scaling Factor Sweeps (0.2 -> 1.0) Across Peeling Motion Pipelines", fontsize=14, fontweight='bold')
 
@@ -486,7 +532,6 @@ class StickerPeelBenchmarkSuite:
         print("="*115 + "\n")
 
 
-# ── Main Suite Entrypoint ────────────────────────────────────────────────────
 def main():
     suite = StickerPeelBenchmarkSuite()
 
