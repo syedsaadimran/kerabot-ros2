@@ -433,7 +433,7 @@ class StickerPeelBenchmarkSuite:
         return run_summary
 
     def generate_visual_analytics(self):
-        ws_dir = "/home/saad/kerabot_ws"
+        ws_dir = "/home/saad/kerabot_ws/results"
         os.makedirs(ws_dir, exist_ok=True)
 
         print("\n=========================================================================")
