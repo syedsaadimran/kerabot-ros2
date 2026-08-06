@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-stress_test.py — Comprehensive stress test suite for Kerabot 5-DOF arm.
+stress_test.py — Comprehensive stress test suite for Kerabot 6-DOF arm.
 Plans and executes motion across 3 categories using Pilz PTP + Ruckig:
 
   Category 1: Joint-space sweep — targets across the workspace
   Category 2: Rapid-fire repeats — back-to-back execution without home reset
-  Category 3: Edge-of-limit targets — near valid joint limits (±2.9 rad)
+  Category 3: Edge-of-limit targets — near valid joint limits (±2.8 rad for J1-J5, ±3.1 rad for J6)
 
 Usage:
     python3 stress_test.py
@@ -22,37 +22,38 @@ from rclpy.executors import MultiThreadedExecutor
 from pymoveit2 import MoveIt2
 
 
-JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5"]
+JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5", "ee_rotation_joint"]
 BASE_LINK    = "base_link"
-END_EFFECTOR = "L70IE_Finger"
+END_EFFECTOR = "end_effector_box_link"
 MOVE_GROUP   = "arm"
-HOME         = [0.0, 0.0, 0.0, 0.0, 0.0]
+HOME         = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Category 1: Joint-space sweep targets (radians)
 SWEEP_TARGETS = [
-    [ 0.3, -0.3,  0.3, -0.3,  0.3],
-    [-0.3,  0.3, -0.3,  0.3, -0.3],
-    [ 0.6, -0.6,  0.6, -0.6,  0.6],
-    [-0.6,  0.6, -0.6,  0.6, -0.6],
-    [ 0.9, -0.9,  0.9, -0.9,  0.9],
-    [ 0.0, -0.5,  0.5,  0.0, -0.5],
-    [ 0.5,  0.0, -0.5,  0.5,  0.0],
-    [ 1.2, -1.2,  0.6, -0.3,  0.8],
+    [ 0.3, -0.3,  0.3, -0.3,  0.3,  0.5],
+    [-0.3,  0.3, -0.3,  0.3, -0.3, -0.5],
+    [ 0.6, -0.6,  0.6, -0.6,  0.6,  1.0],
+    [-0.6,  0.6, -0.6,  0.6, -0.6, -1.0],
+    [ 0.9, -0.9,  0.9, -0.9,  0.9,  1.5],
+    [ 0.0, -0.5,  0.5,  0.0, -0.5,  0.0],
+    [ 0.5,  0.0, -0.5,  0.5,  0.0, -0.5],
+    [ 1.2, -1.2,  0.6, -0.3,  0.8,  1.2],
 ]
 
 # Category 2: Rapid-fire repeated motion
-RAPID_FIRE_TARGET  = [0.2, -0.2, 0.2, -0.2, 0.2]
+RAPID_FIRE_TARGET  = [0.2, -0.2, 0.2, -0.2, 0.2, 0.4]
 RAPID_FIRE_REPEATS = 8
 
-# Category 3: Edge-of-limit targets (URDF limit is ±2.967 rad / ~170°)
+# Category 3: Edge-of-limit targets
 EDGE_TARGETS = [
-    [ 2.8,  0.0,  0.0,  0.0,  0.0],
-    [-2.8,  0.0,  0.0,  0.0,  0.0],
-    [ 0.0, -2.5,  0.0,  0.0,  0.0],
-    [ 0.0,  0.0,  2.5,  0.0,  0.0],
-    [ 0.0,  0.0,  0.0,  2.8,  0.0],
-    [ 0.0,  0.0,  0.0,  0.0,  2.8],
-    [-1.5, -1.0,  1.0,  1.0, -1.0],
+    [ 2.8,  0.0,  0.0,  0.0,  0.0,  0.0],
+    [-2.8,  0.0,  0.0,  0.0,  0.0,  0.0],
+    [ 0.0, -2.5,  0.0,  0.0,  0.0,  0.0],
+    [ 0.0,  0.0,  2.5,  0.0,  0.0,  0.0],
+    [ 0.0,  0.0,  0.0,  2.8,  0.0,  0.0],
+    [ 0.0,  0.0,  0.0,  0.0,  2.8,  0.0],
+    [ 0.0,  0.0,  0.0,  0.0,  0.0,  3.0],
+    [-1.5, -1.0,  1.0,  1.0, -1.0, -1.5],
 ]
 
 
@@ -163,7 +164,7 @@ def main():
         target = RAPID_FIRE_TARGET if i % 2 == 0 else HOME
         run_move(moveit2, node, f"rapid_{i}", target, results)
 
-    print("\n=== CATEGORY 3: Edge-of-limit targets (±2.8 to ±2.9 rad) ===")
+    print("\n=== CATEGORY 3: Edge-of-limit targets (±2.8 rad J1-J5, ±3.0 rad J6) ===")
     for i, target in enumerate(EDGE_TARGETS):
         go_home(moveit2, node)
         run_move(moveit2, node, f"edge_{i}", target, results)
@@ -172,7 +173,7 @@ def main():
 
     # ── Summary Report ────────────────────────────────────────────────────────
     print("\n" + "=" * 70)
-    print("KERABOT STRESS TEST SUMMARY")
+    print("KERABOT STRESS TEST SUMMARY (6-DoF)")
     print("=" * 70)
     total     = len(results)
     plan_fail = sum(1 for r in results if not r.plan_ok)

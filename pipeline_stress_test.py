@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-pipeline_stress_test.py — Motion Pipelining & Dynamic Pipeline Switching
-==========================================================================
-Stress tests two advanced MoveIt capabilities:
+pipeline_stress_test.py — Motion Pipelining & Dynamic Pipeline Switching (6-DoF Arm)
+==================================================================================
+Stress tests two advanced MoveIt capabilities for the 6-DoF arm with EE box payload:
 
 1. CHAINED MOTION PIPELINING:
    Executes a continuous sequence of 8 waypoints back-to-back without
@@ -33,31 +33,31 @@ from rclpy.executors import MultiThreadedExecutor
 from pymoveit2 import MoveIt2
 
 
-JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5"]
+JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5", "ee_rotation_joint"]
 BASE_LINK    = "base_link"
-END_EFFECTOR = "L70IE_Finger"
+END_EFFECTOR = "end_effector_box_link"
 MOVE_GROUP   = "arm"
-HOME         = [0.0, 0.0, 0.0, 0.0, 0.0]
+HOME         = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-# Continuous 8-waypoint trajectory (within valid collision-free bounds)
+# Continuous 8-waypoint trajectory (6-DoF, within valid collision-free bounds)
 CHAINED_WAYPOINTS = [
-    ("WP1 - Front Low",    [ 0.0, -0.6,  0.8,  0.0,  0.5]),
-    ("WP2 - Left Reach",   [ 1.2, -0.8,  0.8,  0.5,  0.0]),
-    ("WP3 - Left High",    [ 1.2, -0.8,  1.0, -0.5, -0.5]),
-    ("WP4 - Right Reach",  [-1.2, -0.8,  0.8, -0.5,  0.0]),
-    ("WP5 - Right High",   [-1.2, -0.8,  1.0,  0.5,  0.5]),
-    ("WP6 - Upright",      [ 0.0, -0.5,  0.5,  0.0,  0.0]),
-    ("WP7 - Twist Wrist",  [ 0.0, -0.8,  1.0,  2.5,  1.0]),
-    ("WP8 - Home",         [ 0.0,  0.0,  0.0,  0.0,  0.0]),
+    ("WP1 - Front Low",    [ 0.0, -0.6,  0.8,  0.0,  0.5,  0.0]),
+    ("WP2 - Left Reach",   [ 1.2, -0.8,  0.8,  0.5,  0.0,  0.5]),
+    ("WP3 - Left High",    [ 1.2, -0.8,  1.0, -0.5, -0.5, -0.5]),
+    ("WP4 - Right Reach",  [-1.2, -0.8,  0.8, -0.5,  0.0,  0.5]),
+    ("WP5 - Right High",   [-1.2, -0.8,  1.0,  0.5,  0.5, -0.5]),
+    ("WP6 - Upright",      [ 0.0, -0.5,  0.5,  0.0,  0.0,  0.0]),
+    ("WP7 - Twist Wrist",  [ 0.0, -0.8,  1.0,  2.5,  1.0,  1.5]),
+    ("WP8 - Home",         [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0]),
 ]
 
 # Pipeline switching sequence: (pipeline_id, planner_id, vel, accel, target)
 DYNAMIC_PIPELINE_SEQUENCE = [
-    ("pilz_industrial_motion_planner", "PTP",        0.3, 0.2, [ 0.4, -0.6, 0.6,  0.0,  0.2]),
-    ("ompl",                           "RRTConnect", 0.5, 0.3, [-0.4, -0.6, 0.6,  0.0, -0.2]),
-    ("pilz_industrial_motion_planner", "PTP",        0.7, 0.5, [ 0.8, -1.0, 0.8,  0.5,  0.4]),
-    ("ompl",                           "RRTConnect", 0.4, 0.2, [-0.8, -1.0, 0.8, -0.5, -0.4]),
-    ("pilz_industrial_motion_planner", "PTP",        0.5, 0.3, [ 0.0, -0.5, 0.5,  0.0,  0.0]),
+    ("pilz_industrial_motion_planner", "PTP",        0.3, 0.2, [ 0.4, -0.6, 0.6,  0.0,  0.2,  0.3]),
+    ("ompl",                           "RRTConnect", 0.5, 0.3, [-0.4, -0.6, 0.6,  0.0, -0.2, -0.3]),
+    ("pilz_industrial_motion_planner", "PTP",        0.7, 0.5, [ 0.8, -1.0, 0.8,  0.5,  0.4,  0.8]),
+    ("ompl",                           "RRTConnect", 0.4, 0.2, [-0.8, -1.0, 0.8, -0.5, -0.4, -0.8]),
+    ("pilz_industrial_motion_planner", "PTP",        0.5, 0.3, [ 0.0, -0.5, 0.5,  0.0,  0.0,  0.0]),
 ]
 
 
@@ -92,7 +92,7 @@ def main():
 
     # ── TEST 1: Chained Motion Pipelining ────────────────────────────────────
     print("\n" + "=" * 76)
-    print("  TEST 1: CHAINED CONTINUOUS WAYPOINT PIPELINING (Pilz PTP)")
+    print("  TEST 1: CHAINED CONTINUOUS WAYPOINT PIPELINING (6-DoF Pilz PTP)")
     print("=" * 76)
     print("  Executing 8 waypoints back-to-back without home resets...\n")
 
@@ -176,7 +176,7 @@ def main():
 
     # ── Final Summary ────────────────────────────────────────────────────────
     print("\n" + "=" * 76)
-    print("  OVERALL PIPELINING STRESS TEST SUMMARY")
+    print("  OVERALL PIPELINING STRESS TEST SUMMARY (6-DoF)")
     print("=" * 76)
     print(f"  Test 1 (Chained Waypoints): {chain_pass}/{len(CHAINED_WAYPOINTS)} Passed")
     print(f"  Test 2 (Pipeline Switching): {sum(1 for r in switch_results if r)}/{len(DYNAMIC_PIPELINE_SEQUENCE)} Passed")

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-pick_place_industrial_sim.py — Full Industrial Pick & Place Sequence Test
-==========================================================================
+pick_place_industrial_sim.py — Full Industrial Pick & Place Sequence Test (6-DoF Arm)
+====================================================================================
 Executes a complete 5-stage industrial Pick & Place workflow for 6 distinct
-pick-and-place object transfers across the workspace with active ground plane
-collision checking:
+pick-and-place object transfers across the workspace using the 6-DoF Kerabot arm
+and the 329x267x100mm end-effector box payload:
 
   Stage 1: Pre-Pick Approach  (X_pick,  Y_pick,  Z_hover = 0.35m)
   Stage 2: Pick Descent       (X_pick,  Y_pick,  Z_pick  = 0.22m)
   Stage 3: Post-Pick Lift     (X_pick,  Y_pick,  Z_hover = 0.35m)
   Stage 4: Transport & Place  (X_place, Y_place, Z_place = 0.22m)
-  Stage 5: Retract & Reset    (Home [0,0,0,0,0])
+  Stage 5: Retract & Reset    (Home [0,0,0,0,0,0])
 
 Uses Pilz PTP + Ruckig trapezoidal smoothing for all moves.
 
@@ -33,11 +33,11 @@ from rclpy.executors import MultiThreadedExecutor
 from pymoveit2 import MoveIt2
 
 
-JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5"]
+JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolute_5", "ee_rotation_joint"]
 BASE_LINK    = "base_link"
-END_EFFECTOR = "L70IE_Finger"
+END_EFFECTOR = "end_effector_box_link"
 MOVE_GROUP   = "arm"
-HOME         = [0.0, 0.0, 0.0, 0.0, 0.0]
+HOME         = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Pick and Place Transfers: (Transfer Label, Pick_XYZ, Place_XYZ)
 TRANSFERS = [
@@ -50,9 +50,9 @@ TRANSFERS = [
 ]
 
 
-# ── Collision-Free 5-DOF IK Solver ──────────────────────────────────────────
+# ── Collision-Free 6-DOF IK Solver ──────────────────────────────────────────
 def fk_kerabot_full(q):
-    q1, q2, q3, q4, q5 = q
+    q1, q2, q3, q4, q5, q6 = q
 
     T1 = np.eye(4)
     T1[:3, 3] = [0.0, 0.0, 0.08]
@@ -85,20 +85,26 @@ def fk_kerabot_full(q):
     R_j5_base = R.from_euler('xyz', [-0.000787, -np.pi/2, 0.002101]).as_matrix()
     R_j5_rot  = R.from_euler('xyz', [0, 0, q5]).as_matrix()
     T5[:3, :3] = R_j5_base @ R_j5_rot
-    T_total = T1234 @ T5
+    T12345 = T1234 @ T5
 
-    pos_ee = T_total[:3, 3]
-    tool_z = T_total[:3, 2]
-    links  = [T1[:3, 3], T12[:3, 3], T123[:3, 3], T1234[:3, 3]]
-    return pos_ee, tool_z, links
+    T6 = np.eye(4)
+    T6[:3, 3] = [0.150, 0.0, 0.050]
+    R_j6_base = R.from_euler('xyz', [0, np.pi/2, 0]).as_matrix()
+    R_j6_rot  = R.from_euler('xyz', [0, 0, q6]).as_matrix()
+    T6[:3, :3] = R_j6_base @ R_j6_rot
+    T_total = T12345 @ T6
+
+    p_box_center = T_total @ np.array([0.0, 0.0, 0.050, 1.0])
+    pos_ee = p_box_center[:3]
+    links = [T1[:3, 3], T12[:3, 3], T123[:3, 3], T1234[:3, 3], T12345[:3, 3], T_total[:3, 3], pos_ee]
+    return pos_ee, links
 
 
 def solve_ik_collision_free(target_xyz):
     target_pos = np.array(target_xyz)
-    target_z_dir = np.array([0.0, 0.0, -1.0])
 
     def objective(q):
-        pos_ee, tool_z, links = fk_kerabot_full(q)
+        pos_ee, links = fk_kerabot_full(q)
         pos_err = np.linalg.norm(pos_ee - target_pos)
 
         # Ground clearance penalty (Z > 0.03m for all links)
@@ -106,31 +112,31 @@ def solve_ik_collision_free(target_xyz):
 
         # Joint limit soft penalty
         j_pen = sum(100.0 * (lo - q_i)**2 if q_i < lo else (100.0 * (q_i - hi)**2 if q_i > hi else 0)
-                    for q_i, (lo, hi) in zip(q, [(-2.9, 2.9)] * 5))
+                    for q_i, (lo, hi) in zip(q, [(-2.9, 2.9)]*5 + [(-3.14, 3.14)]))
 
         return 1000.0 * pos_err**2 + g_pen + j_pen
 
-    bounds = [(-2.9, 2.9)] * 5
+    bounds = [(-2.9, 2.9)] * 5 + [(-3.14, 3.14)]
     best_q = None
     best_cost = float("inf")
 
     q1_base = math.atan2(target_xyz[0], -target_xyz[1])
     guesses = [
-        [q1_base, -0.6, 1.2, 0.0, 0.0],
-        [q1_base, -1.0, 1.6, 0.0, -0.5],
-        [q1_base, -0.4, 0.8, 0.0, 0.5],
+        [q1_base, -0.6, 1.2, 0.0, 0.0, 0.0],
+        [q1_base, -1.0, 1.6, 0.0, -0.5, 0.0],
+        [q1_base, -0.4, 0.8, 0.0, 0.5, 0.0],
     ]
 
     for q0 in guesses:
-        res = minimize(objective, q0, method='L-BFGS-B', bounds=bounds, options={'maxiter': 50})
-        if res.success and res.fun < best_cost:
+        res = minimize(objective, q0, method='SLSQP', bounds=bounds, options={'maxiter': 100})
+        if res.fun < best_cost:
             best_cost = res.fun
             best_q = res.x
 
     if best_q is None:
         return None
 
-    pos_act, _, links = fk_kerabot_full(best_q)
+    pos_act, links = fk_kerabot_full(best_q)
     if np.linalg.norm(pos_act - target_pos) > 0.04 or any(l[2] < 0.01 for l in links):
         return None
 
@@ -180,7 +186,7 @@ def main():
     time.sleep(1.5)
 
     print("\n" + "=" * 78)
-    print("  KERABOT INDUSTRIAL PICK & PLACE TRANSFERS (5-Stage Motion Pipeline)")
+    print("  KERABOT INDUSTRIAL PICK & PLACE TRANSFERS (6-DoF Arm)")
     print("=" * 78)
     print("  Executing 6 complete Pick -> Lift -> Transport -> Place -> Reset sequences...\n")
 
@@ -220,7 +226,7 @@ def main():
 
     # ── Final Summary ────────────────────────────────────────────────────────
     print("=" * 78)
-    print("  INDUSTRIAL PICK & PLACE STRESS TEST SUMMARY")
+    print("  INDUSTRIAL PICK & PLACE STRESS TEST SUMMARY (6-DoF)")
     print("=" * 78)
 
     passed_cnt = sum(1 for _, ok, _ in transfer_summary if ok)
