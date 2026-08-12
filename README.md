@@ -1,29 +1,23 @@
-# Kerabot — 6DoF Robotic Arm Software Stack
+# Kerabot — 6-DoF Robotic Arm Software Stack
 
-> A complete ROS2 Humble + MoveIt2 software stack for the **Kerabot** 5-actuated DoF robotic arm,
-> featuring jerk-limited trapezoidal motion via **Pilz PTP + Ruckig smoothing**,
-> persistent **ground plane & self-collision detection**, dynamic pipeline switching to OMPL,
-> and a complete **5-stage industrial Pick & Place simulation suite**.
+> A complete ROS 2 Humble + MoveIt 2 software stack for the **Kerabot 6-DoF** robotic arm,
+> featuring an active rotating 6th axis (`ee_rotation_joint`), a $329 \times 267 \times 100\text{ mm}$ end-effector box payload (`end_effector_box_link`),
+> jerk-limited trapezoidal motion via **Pilz PTP / LIN + Ruckig smoothing**,
+> persistent **ground plane & strict self-collision detection**, dynamic pipeline switching to OMPL,
+> and a comprehensive **Sticker Pick, Peel & Place Trajectory Benchmark Suite**.
 
 ---
 
 ## Table of Contents
 
 1. [Hardware & Kinematics Overview](#hardware--kinematics-overview)
-2. [Software Architecture & Pipelines](#software-architecture--pipelines)
+2. [Software Architecture & Layout](#software-architecture--layout)
 3. [Quick Setup & Verification Checklist](#quick-setup--verification-checklist)
-4. [Ground Plane & Collision Management](#ground-plane--collision-management)
-5. [Stress Test & Verification Suite](#stress-test--verification-suite)
-   - [add_ground_plane.py — Environment Setup](#add_ground_planepy--environment-setup)
-   - [verify_ground_collision.py — Ground Collision Test](#verify_ground_collisionpy--ground-collision-test)
-   - [collision_stress_test.py — Self-Collision Limit Finder](#collision_stress_testpy--self-collision-limit-finder)
-   - [pipeline_stress_test.py — Pipelining & Switching Test](#pipeline_stress_testpy--pipelining--switching-test)
-   - [pick_place_industrial_sim.py — Full 5-Stage Pick & Place](#pick_place_industrial_simpy--full-5-stage-pick--place)
-   - [pick_place_stress_test.py — Pick Viability Evaluator](#pick_place_stress_testpy--pick-viability-evaluator)
-   - [stress_test.py — 23-Profile Motion Stress Test](#stress_testpy--23-profile-motion-stress-test)
-   - [manual_move.py — Interactive Validated Planner](#manual_movepy--interactive-validated-planner)
-6. [Pilz PTP + Ruckig Smoothing Architecture](#pilz-ptp--ruckig-smoothing-architecture)
-7. [Troubleshooting & Verification Commands](#troubleshooting--verification-commands)
+4. [Sticker Pick, Peel & Place Benchmark Suite](#sticker-pick-peel--place-benchmark-suite)
+5. [Motion Scripts & Test Suite](#motion-scripts--test-suite)
+6. [Ground Plane & Strict Collision Safety](#ground-plane--strict-collision-safety)
+7. [Pilz PTP / LIN + Ruckig Dynamics Architecture](#pilz-ptp--lin--ruckig-dynamics-architecture)
+8. [Troubleshooting & Verification Commands](#troubleshooting--verification-commands)
 
 ---
 
@@ -31,41 +25,57 @@
 
 | Property | Value |
 |---|---|
-| DOF | 5 actuated revolute joints + end effector |
-| MoveIt planning group | `arm` (Revolute_1 – Revolute_5) |
-| End effector link | `L70IE_Finger` |
-| Base mounting link | `base_link` (Z = 0.00m table level) |
-| Peak joint torque limit | 5.0 N·m |
-| Max joint velocity | 2.79 rad/s (~160 °/s) |
+| **DOF** | 6 active revolute joints (`Revolute_1` – `Revolute_5` + `ee_rotation_joint`) |
+| **MoveIt Planning Group** | `arm` (`base_link` $\rightarrow$ `end_effector_box_link`) |
+| **End Effector Payload** | `end_effector_box_link` ($0.329 \text{ m} \times 0.267 \text{ m} \times 0.100 \text{ m}$) |
+| **Base Mounting Link** | `base_link` (Z = 0.00m table level) |
+| **Peak Joint Torque Limit** | 5.0 N·m (Joints 1–5), 10.0 N·m (Joint 6) |
+| **Max Velocity Limits** | 2.79 rad/s (Joints 1–5), 3.14 rad/s (Joint 6) |
 
-### Joint Axes & Angular Boundaries
-- **Revolute_1** (base yaw) — rotation about **Z**: `[-2.95, +2.95] rad` (Full Range Clear)
-- **Revolute_2** (shoulder pitch) — rotation about **X**: `[-1.53, +1.53] rad` (Restricted by table & base self-collision)
-- **Revolute_3** (elbow pitch) — rotation about **X**: `[-2.75, +2.75] rad` (Self-collision limited)
-- **Revolute_4** (forearm roll) — rotation about **Z**: `[-2.95, +2.95] rad` (Full Range Clear)
-- **Revolute_5** (wrist pitch) — rotation about **X**: `[-2.95, +2.95] rad` (Full Range Clear)
+### Joint Axes & Kinematic Boundaries
+- **Revolute_1** (base yaw) — rotation about **Z**: `[-2.90, +2.90] rad`
+- **Revolute_2** (shoulder pitch) — rotation about **X**: `[-2.90, +2.90] rad`
+- **Revolute_3** (elbow pitch) — rotation about **X**: `[-2.90, +2.90] rad`
+- **Revolute_4** (forearm roll) — rotation about **Z**: `[-2.90, +2.90] rad`
+- **Revolute_5** (wrist pitch) — rotation about **X**: `[-2.90, +2.90] rad`
+- **ee_rotation_joint** (active 6th axis EE rotation) — rotation about **Z**: `[-3.14159, +3.14159] rad`
+
+### Kinematic Tree (`check_urdf`)
+```text
+base_link
+  └── L110I_Shoulder
+      └── L110I_shoulder_2
+          └── J2J3_Shoulder
+              └── Wrist_Motor
+                  └── L70IE_Finger
+                      └── end_effector_box_link (Kinematic Tip)
+```
 
 ---
 
-## Software Architecture & Pipelines
+## Software Architecture & Layout
 
 ```text
 kerabot_ws/
 ├── src/
-│   ├── kerabot_description/       # URDF geometry, meshes, launch
-│   ├── kerabot_moveit_config/     # MoveIt2 configuration & adapters
-│   │   ├── config/ompl_planning.yaml                  (TOTG adapter for OMPL)
-│   │   ├── config/pilz_industrial_motion_planner.yaml (request_adapters: "")
-│   │   └── launch/demo.launch.py                      (default: pilz, secondary: ompl)
-│   └── pymoveit2/                 # Python MoveIt2 API wrapper
-├── add_ground_plane.py            ← Adds 2m x 2m x 0.1m collision box (Z_top = 0.0m)
-├── verify_ground_collision.py    ← Verifies MoveIt rejects Z < 0.0m moves
-├── collision_stress_test.py      ← Sweeps self-collision joint limits
-├── pipeline_stress_test.py       ← Chained waypoints & Pilz <-> OMPL switching
-├── pick_place_industrial_sim.py  ← Full 5-stage Pick & Place transfer sequence
-├── pick_place_stress_test.py     ← 16-point pick orientation & clearance evaluator
-├── stress_test.py                ← 23-profile joint-space & boundary test
-└── manual_move.py                ← Interactive 4-step validated mover
+│   ├── Robot_to_URDF_New_Pakka_description/  # URDF xacro geometry, meshes, CMakeLists
+│   ├── kerabot_moveit_config/                # MoveIt 2 configuration, SRDF, joint limits
+│   └── pymoveit2/                            # Python MoveIt 2 API wrapper
+├── scripts/                                   # All executable motion & benchmark scripts
+│   ├── peel_place_benchmark_suite.py         # 6-DoF Sticker Pick, Peel & Place Trajectory Benchmark Suite
+│   ├── pick_place_industrial_sim.py          # 6-DoF 5-Stage Pick & Place Simulation
+│   ├── pipeline_stress_test.py               # Chained Waypoint & Dynamic Pipeline Switching Test
+│   ├── stress_test.py                        # 3-Category Joint Sweep & Limit Stress Test
+│   ├── collision_stress_test.py              # Self-Collision Boundary Finder
+│   ├── compare_profiles.py                   # Trajectory Dynamics & Profile Comparisons
+│   ├── manual_move.py                        # Interactive Validated Planner
+│   └── add_ground_plane.py                   # Ground Plane Collision Publisher
+└── results/                                   # Exported PNG visual analytics & plots
+    ├── peel_benchmark_summary.png            # Sticker peel execution & jerk metrics
+    ├── peel_benchmark_velocity.png           # Speed scaling factor curves (0.2 -> 1.0)
+    ├── trapezoidal_dynamics_plot v1.png
+    ├── ruckig_comparison.png
+    └── ruckig_stats.png
 ```
 
 ---
@@ -79,75 +89,88 @@ Always execute setup & verification steps in the following order:
 source /opt/ros/humble/setup.bash
 source ~/kerabot_ws/install/setup.bash
 
-# 2. Launch MoveIt 2 + RViz
+# 2. Rebuild packages & compile URDF from xacro (if modifying URDF/SRDF)
+cd ~/kerabot_ws
+colcon build --packages-select Robot_to_URDF_New_Pakka_description kerabot_moveit_config
+source install/setup.bash
+
+# 3. Launch MoveIt 2 + RViz
 ros2 launch kerabot_moveit_config demo.launch.py
 
-# 3. Add ground plane collision object (in a 2nd terminal)
-python3 add_ground_plane.py
+# 4. Run the 6-DoF Sticker Pick, Peel & Place Benchmark Suite (in a 2nd terminal)
+python3 ~/kerabot_ws/scripts/peel_place_benchmark_suite.py
 
-# 4. Verify ground collision rejection
-python3 verify_ground_collision.py
+# 5. Run the 6-DoF Industrial Pick & Place Simulation
+python3 ~/kerabot_ws/scripts/pick_place_industrial_sim.py
 
-# 5. Run motion pipelining & pipeline switching test
-python3 pipeline_stress_test.py
-
-# 6. Run full 5-stage industrial pick-and-place simulation
-python3 pick_place_industrial_sim.py
+# 6. Run the Motion Pipelining & Switching Stress Test
+python3 ~/kerabot_ws/scripts/pipeline_stress_test.py
 ```
 
 ---
 
-## Ground Plane & Collision Management
+## Sticker Pick, Peel & Place Benchmark Suite
 
-MoveIt does not persist planning scene collision objects inside URDF/SRDF files. `add_ground_plane.py` adds a **persistent table collision box** to MoveIt's planning scene via ROS 2 `/apply_planning_scene`:
+The flagship benchmark script [`scripts/peel_place_benchmark_suite.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/peel_place_benchmark_suite.py) tests realistic peeling kinematics across MoveIt 2 planners and dynamics scaling factors:
 
-* **Dimensions**: 2.0m (X) x 2.0m (Y) x 0.10m (Z thickness)
-* **Mounting Plane**: Center at `Z = -0.05m`, setting the top table surface **at Z = 0.00m** (exact base_link mounting plane).
-* **Collision Behavior**: Any trajectory attempting to drive the end-effector or intermediate links into `Z < 0.00m` is rejected by MoveIt FCL with `INVALID_MOTION_PLAN`.
+### Multi-Stage Peeling State Machine
+- **Stage 1: Home $\rightarrow$ Pre-Pick Approach** (OMPL `RRTConnect` / Free-space hover at $Z = 0.35\text{ m}$)
+- **Stage 2: Pre-Pick $\rightarrow$ Sticker Contact** (Pilz `LIN` / Straight vertical descent to vacuum contact at $Z = 0.22\text{ m}$)
+- **Stage 3: Dynamic Sticker Peel Phase** (Pilz `LIN` / Angled Cartesian Retraction):
+  - **Peel Angles Tested**: **15°**, **30°**, **45°**, and **60°** wrist/pitch tilt angles relative to substrate.
+  - Retracts along vector $\vec{v} = (-\cos\alpha, 0, \sin\alpha)$ over $0.12\text{ m}$ with steady linear velocity to simulate clean sticker detachment without tearing.
+- **Stage 4: Peel Exit $\rightarrow$ High Clearance Transfer** (Pilz `PTP` / Elevates to $Z = 0.40\text{ m}$)
+- **Stage 5: Transfer $\rightarrow$ Placement Contact** (Pilz `LIN` / Straight vertical approach to placement surface at $Z = 0.22\text{ m}$ with 0° flat alignment)
+- **Stage 6: Release & Return Home** (OMPL `RRTConnect` / Return sweep back to `Home`)
 
-```bash
-# Add table collision plane:
-python3 add_ground_plane.py
+### Pipeline & Speed Scaling Matrix
+- **Pipelines Benchmark**:
+  - `Pipeline A: OMPL (RRTConnect) + Ruckig`
+  - `Pipeline B: Pilz LIN + Ruckig`
+  - `Pipeline C: Pilz PTP + Ruckig`
+- **Speed Scaling Sweeps**: `max_velocity_scaling_factor` and `max_acceleration_scaling_factor` from $0.2 \rightarrow 1.0$ in $0.2$ increments.
 
-# Remove table collision plane:
-python3 add_ground_plane.py --remove
-```
+### Analytics & Visual Exports (`~/kerabot_ws/results/`)
+- Outputs an itemized terminal summary table listing **Plan Time (ms)**, **Exec Time (s)**, **Peak Vel**, **Peak Accel**, **Peak Jerk** ($< 5.0\text{ rad/s}^3$ limit), **Torques**, and **Collision Pass/Fail**.
+- Saves comparative PNG plots:
+  - `results/peel_benchmark_summary.png`: Bar charts comparing execution time, planning time, and jerk thresholds across peel angles.
+  - `results/peel_benchmark_velocity.png`: Speed scaling factor curves ($0.2 \rightarrow 1.0$) overlaying Peak Velocity, Acceleration, and Jerk profiles.
 
 ---
 
-## Stress Test & Verification Suite
+## Motion Scripts & Test Suite
 
-### `verify_ground_collision.py`
-Verifies ground plane collision detection by executing:
-1. Valid above-ground move (`Z = +0.40m`) -> **PASSED**
-2. Downward fold (`Z < 0.00m`) -> **REJECTED**
-3. Extreme downward fold (`Z < -0.20m`) -> **REJECTED**
+All executable scripts are housed in [`~/kerabot_ws/scripts/`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/):
 
-### `collision_stress_test.py`
-Sweeps each of the 5 joints in fine steps to map out the exact angular boundaries where link-to-link or link-to-base collisions occur.
+* **`peel_place_benchmark_suite.py`**: Full 6-DoF Sticker Pick, Peel & Place Trajectory Benchmark Suite.
+* **`pick_place_industrial_sim.py`**: 6-DoF 5-stage Pick & Place simulation with active EE box collision checking.
+* **`pipeline_stress_test.py`**: Chained continuous waypoint execution & dynamic pipeline switching test.
+* **`stress_test.py`**: 3-category joint-space sweep, rapid-fire, and limit boundary stress test.
+* **`collision_stress_test.py`**: Joint sweep tool mapping self-collision boundaries.
+* **`add_ground_plane.py`**: Adds/removes persistent $2\text{ m} \times 2\text{ m} \times 0.1\text{ m}$ table collision box ($Z_{\text{top}} = 0.0\text{ m}$).
 
-### `pipeline_stress_test.py`
-Tests two core MoveIt operational features:
-1. **Chained Continuous Pipelining**: Executes 8 back-to-back waypoints in sequence without returning home. (Pass rate: 100%)
-2. **Dynamic Pipeline Switching**: Alternates dynamically between `pilz_industrial_motion_planner` (PTP) and `ompl` (RRTConnect) while changing velocity scaling factors (0.3 -> 0.5 -> 0.7 -> 0.4). (Pass rate: 100%)
+---
 
-### `pick_place_industrial_sim.py`
-Executes 6 complete 5-stage Pick & Place transfer workflows:
+## Ground Plane & Strict Collision Safety
+
+### SRDF Strict Self-Collision Matrix
+In `src/kerabot_moveit_config/config/Robot_to_URDF_New_Pakka.srdf`:
+- **Allowed Exception**: ONLY `<disable_collisions link1="end_effector_box_link" link2="L70IE_Finger" reason="Adjacent"/>` (its immediate mounting flange).
+- **Strict Active Checks**: All other structural links (`Wrist_Motor`, `J2J3_Shoulder`, `L110I_shoulder_2`, `L110I_Shoulder`, `base_link`) have **active self-collision checking** against `end_effector_box_link`.
+
+### Robot Collision Padding
+In `src/kerabot_moveit_config/config/kinematics.yaml`:
+- `default_robot_padding: 0.01` ($10\text{ mm}$ safety margin around the end-effector box geometry).
+
+### Ground Clearance Enforcement
+Any trajectory attempting to drive the end-effector box or intermediate links below $Z < 0.02\text{ m}$ is rejected by MoveIt FCL and guarded in Python IK solvers.
+
+---
+
+## Pilz PTP / LIN + Ruckig Dynamics Architecture
+
 ```text
-Stage 1: Pre-Pick Approach  (X_pick,  Y_pick,  Z_hover = 0.35m)
-Stage 2: Pick Descent       (X_pick,  Y_pick,  Z_pick  = 0.22m)
-Stage 3: Post-Pick Lift     (X_pick,  Y_pick,  Z_hover = 0.35m)
-Stage 4: Transport & Place  (X_place, Y_place, Z_place = 0.22m)
-Stage 5: Retract & Reset    (Home [0,0,0,0,0])
-```
-* **Pass Rate**: **6/6 Transfers Passed (30/30 sub-steps completed)** using Pilz PTP + Ruckig trapezoidal dynamics with active ground plane checking.
-
----
-
-## Pilz PTP + Ruckig Smoothing Architecture
-
-```text
- Pilz PTP / LIN (Trapezoidal profile)
+ Pilz PTP / LIN (Trapezoidal Cartesian & Joint Profiles)
       │
       ▼
  AddRuckigTrajectorySmoothing  ← Rounds velocity corners into jerk-limited S-curves
@@ -156,22 +179,23 @@ Stage 5: Retract & Reset    (Home [0,0,0,0,0])
  joint_limits.yaml             (Velocity, acceleration, and jerk caps)
       │
       ▼
- arm_controller (FollowJointTrajectory)
+ arm_controller (FollowJointTrajectory for 6 active joints)
 ```
 
 ---
 
 ## Troubleshooting & Verification Commands
 
-### MoveIt reports `INVALID_MOTION_PLAN`
-1. Check `move_group` logs: `tail -n 25 ~/.ros/log/move_group_*.log`
-2. Check if the target configuration penetrates the ground plane (`Z < 0.00m`) or violates joint bounds (`Revolute_2 < -1.53 rad`).
-
-### Verify Planners are loaded in ROS 2
+### Check Planners Loaded in ROS 2
 ```bash
 ros2 param get /move_group default_planning_pipeline
-# Should return: pilz_industrial_motion_planner
+# Expected: pilz_industrial_motion_planner
 
 ros2 param get /move_group planning_pipelines
-# Should return: ['ompl', 'pilz_industrial_motion_planner']
+# Expected: ['ompl', 'pilz_industrial_motion_planner']
+```
+
+### Validate URDF Structure
+```bash
+check_urdf install/Robot_to_URDF_New_Pakka_description/share/Robot_to_URDF_New_Pakka_description/urdf/Robot_to_URDF_New_Pakka.urdf
 ```
