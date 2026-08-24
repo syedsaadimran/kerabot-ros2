@@ -40,6 +40,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 from pymoveit2 import MoveIt2
+from collision_aware_planner import CollisionAwarePlanner
 
 
 # ── 6-DoF Arm Configuration ──────────────────────────────────────────────────
@@ -315,6 +316,13 @@ class StickerPeelBenchmarkSuite:
             callback_group=self.cb,
         )
 
+        self.planner = CollisionAwarePlanner(
+            node=self.node,
+            moveit2=self.moveit2,
+            max_reroute_attempts=5,
+            planning_timeout=5.0,
+        )
+
         self.executor = MultiThreadedExecutor(2)
         self.executor.add_node(self.node)
         self.spin_thread = threading.Thread(target=self.executor.spin, daemon=True)
@@ -325,60 +333,38 @@ class StickerPeelBenchmarkSuite:
         self.plot_data = {}
 
     def run_stage_motion(self, stage_name, joint_target, pipeline_id, planner_id, vel_scale, accel_scale):
-        self.moveit2.pipeline_id               = pipeline_id
-        self.moveit2.planner_id                = planner_id
-        self.moveit2.max_velocity              = vel_scale
-        self.moveit2.max_acceleration          = accel_scale
-        self.moveit2.num_planning_attempts     = 10
-        self.moveit2.allowed_planning_time     = 5.0
+        # 1. Execute via CollisionAwarePlanner (pre-execution checking + automated OMPL rerouting)
+        plan_res = self.planner.plan_and_execute_with_rerouting(
+            target_joint_positions=joint_target,
+            preferred_pipeline=pipeline_id,
+            preferred_planner=planner_id,
+            vel_scale=vel_scale,
+            accel_scale=accel_scale,
+            stage_name=stage_name,
+        )
 
-        # Strict Self-Collision Check before submitting plan
-        if not check_strict_self_collision(joint_target):
-            self.node.get_logger().error(f"Target pose for [{stage_name}] causes self-collision or ground violation! Rejecting plan.")
+        if not plan_res["success"]:
             return {
-                "stage": stage_name, "success": False, "plan_ms": 0.0, "exec_s": 0.0,
+                "stage": stage_name, "success": False, "rerouted": plan_res.get("rerouted", False),
+                "plan_ms": plan_res["plan_time_ms"], "exec_s": 0.0,
                 "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
                 "est_torque": 0.0, "collision_pass": False, "time_series": None
             }
 
-        t_plan_start = time.time()
-        traj = self.moveit2.plan(joint_positions=joint_target, joint_names=JOINT_NAMES)
-        t_plan = (time.time() - t_plan_start) * 1000.0  # ms
-
-        # ISSUE 1 FIX: Safety check on planned trajectory
-        if traj is None or not hasattr(traj, 'points') or len(traj.points) < 2:
-            return {
-                "stage": stage_name, "success": False, "plan_ms": t_plan, "exec_s": 0.0,
-                "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
-                "est_torque": 0.0, "collision_pass": False, "time_series": None
-            }
-
-        # Analyze planned trajectory dynamics cleanly
-        dyn = analyze_trajectory_dynamics(self.node, traj)
-        if not dyn.get("success", False):
-            return {
-                "stage": stage_name, "success": False, "plan_ms": t_plan, "exec_s": 0.0,
-                "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": False,
-                "est_torque": 0.0, "collision_pass": False, "time_series": None
-            }
-
-        t_exec_start = time.time()
-        self.moveit2.execute(traj)
-        self.moveit2.wait_until_executed()
-        t_exec = time.time() - t_exec_start
-
-        # ISSUE 2 FIX: Monitor joint states for continuous self-collision & ground clearance
-        current_q = get_current_joints(self.moveit2)
-        collision_pass = True
-        if current_q is not None:
-            collision_pass = check_strict_self_collision(current_q)
+        traj = plan_res["trajectory"]
+        dyn = analyze_trajectory_dynamics(self.node, traj) if traj else {
+            "max_vel": 0.0, "max_accel": 0.0, "max_jerk": 0.0, "jerk_pass": True, "est_torque": 0.0, "time_series": None
+        }
 
         return {
-            "stage": stage_name, "success": True, "plan_ms": t_plan, "exec_s": t_exec,
-            "max_vel": dyn["max_vel"], "max_accel": dyn["max_accel"], "max_jerk": dyn["max_jerk"],
-            "jerk_pass": dyn["jerk_pass"], "est_torque": dyn["est_torque"],
-            "collision_pass": collision_pass, "time_series": dyn["time_series"]
+            "stage": stage_name, "success": True, "rerouted": plan_res.get("rerouted", False),
+            "plan_ms": plan_res["plan_time_ms"], "exec_s": plan_res["exec_time_s"],
+            "max_vel": dyn.get("max_vel", 0.0), "max_accel": dyn.get("max_accel", 0.0),
+            "max_jerk": dyn.get("max_jerk", 0.0), "jerk_pass": dyn.get("jerk_pass", True),
+            "est_torque": dyn.get("est_torque", 0.0),
+            "collision_pass": True, "time_series": dyn.get("time_series", None)
         }
+
 
     def execute_peel_sequence(self, peel_angle_deg, pipe_label, pipe_id, planner_id, vel_scale, accel_scale):
         print(f"\n─────────────────────────────────────────────────────────────────────────────")

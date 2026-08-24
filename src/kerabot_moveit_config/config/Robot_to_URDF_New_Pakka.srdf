@@ -18,36 +18,27 @@
     <!--VIRTUAL JOINT-->
     <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="base_link"/>
 
-    <!--DISABLE COLLISIONS FOR ADJACENT AND NEVER-TOUCHING STRUCTURAL LINKS-->
-    <!-- Base link -->
+    <!-- DISABLE COLLISIONS FOR DIRECTLY CONNECTED ADJACENT JOINTS ONLY -->
+    <!-- Base link -> Shoulder 1 -->
     <disable_collisions link1="base_link" link2="L110I_Shoulder" reason="Adjacent"/>
-    <disable_collisions link1="base_link" link2="L110I_shoulder_2" reason="Never"/>
-    <disable_collisions link1="base_link" link2="J2J3_Shoulder" reason="Never"/>
-    <disable_collisions link1="base_link" link2="Wrist_Motor" reason="Never"/>
-    <disable_collisions link1="base_link" link2="L70IE_Finger" reason="Never"/>
 
-    <!-- Link 1 (L110I_Shoulder) -->
+    <!-- Shoulder 1 -> Shoulder 2 -->
     <disable_collisions link1="L110I_Shoulder" link2="L110I_shoulder_2" reason="Adjacent"/>
-    <disable_collisions link1="L110I_Shoulder" link2="J2J3_Shoulder" reason="Never"/>
-    <disable_collisions link1="L110I_Shoulder" link2="Wrist_Motor" reason="Never"/>
-    <disable_collisions link1="L110I_Shoulder" link2="L70IE_Finger" reason="Never"/>
 
-    <!-- Link 2 (L110I_shoulder_2) -->
+    <!-- Shoulder 2 -> Elbow/Forearm (J2J3_Shoulder) -->
     <disable_collisions link1="L110I_shoulder_2" link2="J2J3_Shoulder" reason="Adjacent"/>
-    <disable_collisions link1="L110I_shoulder_2" link2="Wrist_Motor" reason="Never"/>
-    <disable_collisions link1="L110I_shoulder_2" link2="L70IE_Finger" reason="Never"/>
 
-    <!-- Link 3 (J2J3_Shoulder) -->
+    <!-- Elbow/Forearm (J2J3_Shoulder) -> Wrist Motor -->
     <disable_collisions link1="J2J3_Shoulder" link2="Wrist_Motor" reason="Adjacent"/>
-    <disable_collisions link1="J2J3_Shoulder" link2="L70IE_Finger" reason="Never"/>
 
-    <!-- Link 4/5 (Wrist_Motor & L70IE_Finger) -->
+    <!-- Wrist Motor -> End-Effector Holder (L70IE_Finger) -->
     <disable_collisions link1="Wrist_Motor" link2="L70IE_Finger" reason="Adjacent"/>
 
-    <!-- End Effector Box: Exclude immediate forearm/wrist links.
-         ALL other links (L110I_shoulder_2, L110I_Shoulder, base_link) and ground
-         are strictly collision-checked. -->
-    <disable_collisions link1="end_effector_box_link" link2="L70IE_Finger" reason="Adjacent"/>
-    <disable_collisions link1="end_effector_box_link" link2="Wrist_Motor" reason="Adjacent"/>
-    <disable_collisions link1="end_effector_box_link" link2="J2J3_Shoulder" reason="Never"/>
+    <!-- End-Effector Holder (L70IE_Finger) -> End-Effector Payload Box -->
+    <disable_collisions link1="L70IE_Finger" link2="end_effector_box_link" reason="Adjacent"/>
+
+    <!-- ALL other pairs (especially end_effector_box_link against Wrist_Motor,
+         J2J3_Shoulder, L110I_shoulder_2, L110I_Shoulder, base_link) MUST BE CHECKED.
+         NO non-adjacent collision disables are permitted. -->
 </robot>
+
