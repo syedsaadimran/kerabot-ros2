@@ -1,37 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--This does not replace URDF, and is not an extension of URDF.
-    This is a format for representing semantic information about the robot structure.
-    A URDF file must exist for this robot as well, where the joints and the links that are referenced are defined
--->
 <robot name="Robot_to_URDF_New_Pakka">
-    <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
-    <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
-    <!--JOINTS: When a joint is specified, the child link of that joint (which will always exist) is automatically included-->
-    <!--CHAINS: When a chain is specified, all the links along the chain (including endpoints) are included in the group. Additionally, all the joints that are parents to included links are also included. This means that joints along the chain and the parent joint of the base link are included in the group-->
-    <!--SUBGROUPS: Groups can also be formed by referencing to already defined group names-->
+    <!--GROUPS-->
     <group name="arm">
         <chain base_link="base_link" tip_link="end_effector_box_link"/>
     </group>
-    <!--GROUP STATES: Purpose: Define a named state for a particular group, in terms of joint values. This is useful to define states like 'folded arms'-->
+
+    <!--GROUP STATES-->
     <group_state name="home" group="arm">
         <joint name="Revolute_1" value="0"/>
-        <joint name="Revolute_2" value="0"/>
-        <joint name="Revolute_3" value="0"/>
+        <joint name="Revolute_2" value="-0.5"/>
+        <joint name="Revolute_3" value="1.0"/>
         <joint name="Revolute_4" value="0"/>
-        <joint name="Revolute_5" value="0"/>
+        <joint name="Revolute_5" value="-0.5"/>
         <joint name="ee_rotation_joint" value="0"/>
     </group_state>
-    <!--VIRTUAL JOINT: Purpose: this element defines a virtual joint between a robot link and an external frame of reference (considered fixed with respect to the robot)-->
+
+    <!--VIRTUAL JOINT-->
     <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="base_link"/>
-    <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
-    <disable_collisions link1="J2J3_Shoulder" link2="L110I_Shoulder" reason="Never"/>
-    <disable_collisions link1="J2J3_Shoulder" link2="L110I_shoulder_2" reason="Adjacent"/>
-    <disable_collisions link1="J2J3_Shoulder" link2="L70IE_Finger" reason="Never"/>
-    <disable_collisions link1="J2J3_Shoulder" link2="Wrist_Motor" reason="Adjacent"/>
+
+    <!--DISABLE COLLISIONS FOR ADJACENT AND NEVER-TOUCHING STRUCTURAL LINKS-->
+    <!-- Base link -->
+    <disable_collisions link1="base_link" link2="L110I_Shoulder" reason="Adjacent"/>
+    <disable_collisions link1="base_link" link2="L110I_shoulder_2" reason="Never"/>
+    <disable_collisions link1="base_link" link2="J2J3_Shoulder" reason="Never"/>
+    <disable_collisions link1="base_link" link2="Wrist_Motor" reason="Never"/>
+    <disable_collisions link1="base_link" link2="L70IE_Finger" reason="Never"/>
+
+    <!-- Link 1 (L110I_Shoulder) -->
     <disable_collisions link1="L110I_Shoulder" link2="L110I_shoulder_2" reason="Adjacent"/>
-    <disable_collisions link1="L110I_Shoulder" link2="base_link" reason="Adjacent"/>
-    <disable_collisions link1="L70IE_Finger" link2="Wrist_Motor" reason="Adjacent"/>
-    <!-- ONLY disable collisions between end_effector_box_link and its immediate adjacent parent flange (L70IE_Finger).
-         ALL other structural links (Wrist_Motor, J2J3_Shoulder, L110I_Shoulder, base_link) MUST be strictly checked for self-collisions. -->
+    <disable_collisions link1="L110I_Shoulder" link2="J2J3_Shoulder" reason="Never"/>
+    <disable_collisions link1="L110I_Shoulder" link2="Wrist_Motor" reason="Never"/>
+    <disable_collisions link1="L110I_Shoulder" link2="L70IE_Finger" reason="Never"/>
+
+    <!-- Link 2 (L110I_shoulder_2) -->
+    <disable_collisions link1="L110I_shoulder_2" link2="J2J3_Shoulder" reason="Adjacent"/>
+    <disable_collisions link1="L110I_shoulder_2" link2="Wrist_Motor" reason="Never"/>
+    <disable_collisions link1="L110I_shoulder_2" link2="L70IE_Finger" reason="Never"/>
+
+    <!-- Link 3 (J2J3_Shoulder) -->
+    <disable_collisions link1="J2J3_Shoulder" link2="Wrist_Motor" reason="Adjacent"/>
+    <disable_collisions link1="J2J3_Shoulder" link2="L70IE_Finger" reason="Never"/>
+
+    <!-- Link 4/5 (Wrist_Motor & L70IE_Finger) -->
+    <disable_collisions link1="Wrist_Motor" link2="L70IE_Finger" reason="Adjacent"/>
+
+    <!-- End Effector Box: Exclude immediate forearm/wrist links.
+         ALL other links (L110I_shoulder_2, L110I_Shoulder, base_link) and ground
+         are strictly collision-checked. -->
     <disable_collisions link1="end_effector_box_link" link2="L70IE_Finger" reason="Adjacent"/>
+    <disable_collisions link1="end_effector_box_link" link2="Wrist_Motor" reason="Adjacent"/>
+    <disable_collisions link1="end_effector_box_link" link2="J2J3_Shoulder" reason="Never"/>
 </robot>

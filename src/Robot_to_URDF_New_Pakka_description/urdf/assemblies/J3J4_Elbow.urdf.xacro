@@ -1,9 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="J3J4_Elbow_macro">
-
   <xacro:macro name="J3J4_Elbow" params="prefix">
-
-    <!-- Links -->
     <link name="${prefix}J2J3_Shoulder">
       <inertial>
         <origin xyz="0.051916 -0.000049 0.158128" rpy="0 0 0"/>
@@ -25,7 +22,5 @@
         </geometry>
       </collision>
     </link>
-
   </xacro:macro>
-
 </robot>

@@ -6,6 +6,12 @@
   <material name="Stainless_Steel_304">
     <color rgba="0.541 0.596 0.749 1.0"/>
   </material>
+  <link name="world"/>
+  <joint name="world_to_base_link" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+  </joint>
   <link name="J2J3_Shoulder">
     <inertial>
       <origin rpy="0 0 0" xyz="0.051916 -0.000049 0.158128"/>
@@ -192,9 +198,7 @@
   </joint>
   <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
     <hardware>
-      <plugin>mock_components/GenericSystem</plugin>
-      <param name="cmd_topic">sim/Robot_to_URDF_New_Pakka_system/cmd</param>
-      <param name="state_topic">sim/Robot_to_URDF_New_Pakka_system/state</param>
+      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
     </hardware>
     <joint name="Revolute_1">
       <command_interface name="position"/>
@@ -209,7 +213,7 @@
       <command_interface name="position"/>
       <command_interface name="velocity"/>
       <state_interface name="position">
-        <param name="initial_value">0.0</param>
+        <param name="initial_value">-0.5</param>
       </state_interface>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -218,7 +222,7 @@
       <command_interface name="position"/>
       <command_interface name="velocity"/>
       <state_interface name="position">
-        <param name="initial_value">0.0</param>
+        <param name="initial_value">1.0</param>
       </state_interface>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -236,7 +240,7 @@
       <command_interface name="position"/>
       <command_interface name="velocity"/>
       <state_interface name="position">
-        <param name="initial_value">0.0</param>
+        <param name="initial_value">-0.5</param>
       </state_interface>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -251,4 +255,50 @@
       <state_interface name="effort"/>
     </joint>
   </ros2_control>
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>/home/saad/kerabot_ws/install/kerabot_moveit_config/share/kerabot_moveit_config/config/ros2_controllers.yaml</parameters>
+      <robot_param>robot_description</robot_param>
+      <robot_param_node>robot_state_publisher</robot_param_node>
+    </plugin>
+  </gazebo>
+  <gazebo reference="base_link">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <kp>1000000.0</kp>
+    <kd>1.0</kd>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="L110I_Shoulder">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="L110I_shoulder_2">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="J2J3_Shoulder">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="Wrist_Motor">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="L70IE_Finger">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <material>Gazebo/Green</material>
+  </gazebo>
+  <gazebo reference="end_effector_box_link">
+    <mu1>1.2</mu1>
+    <mu2>1.2</mu2>
+    <kp>1000000.0</kp>
+    <kd>1.0</kd>
+    <material>Gazebo/DarkGrey</material>
+  </gazebo>
 </robot>

@@ -1,9 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="Robot_Assembly_URDF_New_macro">
-
   <xacro:macro name="Robot_Assembly_URDF_New" params="prefix">
-
-    <!-- Links -->
     <link name="${prefix}base_link">
       <inertial>
         <origin xyz="-0.000000 0.000148 0.020775" rpy="0 0 0"/>
@@ -25,7 +22,6 @@
         </geometry>
       </collision>
     </link>
-
     <link name="${prefix}Wrist_Motor">
       <inertial>
         <origin xyz="0.010896 -0.000044 0.108189" rpy="0 0 0"/>
@@ -47,7 +43,6 @@
         </geometry>
       </collision>
     </link>
-
     <link name="${prefix}L110I_Shoulder">
       <inertial>
         <origin xyz="0.000000 -0.109833 0.011323" rpy="0 0 0"/>
@@ -69,7 +64,6 @@
         </geometry>
       </collision>
     </link>
-
     <link name="${prefix}L110I_shoulder_2">
       <inertial>
         <origin xyz="-0.000000 0.332413 -0.045103" rpy="0 0 0"/>
@@ -91,8 +85,6 @@
         </geometry>
       </collision>
     </link>
-
-    <!-- Joints (internal to assembly) -->
     <joint name="${prefix}Revolute_1" type="continuous">
       <parent link="${prefix}base_link"/>
       <child link="${prefix}L110I_Shoulder"/>
@@ -100,7 +92,6 @@
       <axis xyz="0.000000 1.000000 -0.000000"/>
       <limit effort="100.0" velocity="1.00"/>
     </joint>
-
     <joint name="${prefix}Revolute_2" type="continuous">
       <parent link="${prefix}L110I_Shoulder"/>
       <child link="${prefix}L110I_shoulder_2"/>
@@ -108,7 +99,5 @@
       <axis xyz="0.000000 -0.000000 1.000000"/>
       <limit effort="100.0" velocity="1.00"/>
     </joint>
-
   </xacro:macro>
-
 </robot>

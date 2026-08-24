@@ -47,7 +47,7 @@ JOINT_NAMES  = ["Revolute_1", "Revolute_2", "Revolute_3", "Revolute_4", "Revolut
 BASE_LINK    = "base_link"
 END_EFFECTOR = "end_effector_box_link"
 MOVE_GROUP   = "arm"
-HOME         = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+HOME         = [0.0, -0.5, 1.0, 0.0, -0.5, 0.0]
 
 # Joint Inertia Estimates (kg*m²)
 INERTIA_VALS = np.array([0.009, 0.012, 0.034, 0.001, 0.002, 0.018])
@@ -144,18 +144,19 @@ def check_strict_self_collision(q):
         return False
 
     # Proximity checks between EE box center (pos_ee) and arm joints
-    # Wrist_Motor is link 4, J2J3_Shoulder is link 3
-    d_wrist = np.linalg.norm(pos_ee - links[4])
-    d_elbow = np.linalg.norm(pos_ee - links[3])
+    d_base = np.linalg.norm(pos_ee - links[0])
+    d_shoulder = np.linalg.norm(pos_ee - links[1])
+    d_elbow = np.linalg.norm(pos_ee - links[2])
+    d_wrist = np.linalg.norm(pos_ee - links[3])
 
-    if d_wrist < 0.10 or d_elbow < 0.14:
+    if d_base < 0.10 or d_shoulder < 0.10 or d_elbow < 0.12 or d_wrist < 0.06:
         return False
 
     return True
 
 
 # ── 6-DoF Numerical Inverse Kinematics (IK) Solver ───────────────────────────
-def solve_ik_6dof(target_xyz, target_pitch_deg=90.0, yaw_angle=0.0):
+def solve_ik_6dof(target_xyz, target_pitch_deg=90.0, yaw_angle=0.0, initial_guess=None):
     target_pos = np.array(target_xyz)
 
     def objective(q):
@@ -176,12 +177,17 @@ def solve_ik_6dof(target_xyz, target_pitch_deg=90.0, yaw_angle=0.0):
     best_cost = float("inf")
 
     q1_base = math.atan2(target_xyz[0], -target_xyz[1])
-    guesses = [
+    guesses = []
+    if initial_guess is not None:
+        guesses.append(list(initial_guess))
+    guesses.extend([
         [q1_base, -0.6, 1.2, 0.0, 0.0, 0.0],
         [q1_base, -1.0, 1.6, 0.0, -0.5, math.radians(yaw_angle)],
         [q1_base, -0.4, 0.8, 0.2, 0.2, 0.0],
+        [q1_base + np.pi, -0.8, 1.8, 0.9, 2.7, math.radians(yaw_angle)],
+        [q1_base - np.pi, -0.8, 1.8, 0.9, 2.7, math.radians(yaw_angle)],
         [0.0, -0.5, 0.5, 0.0, 0.0, 0.0],
-    ]
+    ])
 
     for q0 in guesses:
         res = minimize(objective, q0, method='SLSQP', bounds=bounds, options={'maxiter': 300})
@@ -292,7 +298,12 @@ def analyze_trajectory_dynamics(moveit2_node, joint_trajectory, dt=0.02):
 class StickerPeelBenchmarkSuite:
     def __init__(self):
         rclpy.init()
-        self.node = Node("kerabot_peel_benchmark")
+        self.node = Node(
+            "kerabot_peel_benchmark",
+            parameter_overrides=[
+                rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, True)
+            ],
+        )
         self.cb = ReentrantCallbackGroup()
 
         self.moveit2 = MoveIt2(
@@ -376,16 +387,16 @@ class StickerPeelBenchmarkSuite:
 
         go_home(self.moveit2)
 
-        # Compute targets for the 6-stage sequence
+        # Compute targets for the 6-stage sequence chained continuously
         q_pre_pick = solve_ik_6dof([PICK_XYZ[0], PICK_XYZ[1], HOVER_Z])
-        q_contact  = solve_ik_6dof(PICK_XYZ)
+        q_contact  = solve_ik_6dof(PICK_XYZ, initial_guess=q_pre_pick)
 
         rad_angle = math.radians(peel_angle_deg)
         peel_xyz  = PICK_XYZ + np.array([-PEEL_DIST * math.cos(rad_angle), 0.0, PEEL_DIST * math.sin(rad_angle)])
-        q_peel    = solve_ik_6dof(peel_xyz, target_pitch_deg=90.0 - peel_angle_deg, yaw_angle=peel_angle_deg)
+        q_peel    = solve_ik_6dof(peel_xyz, target_pitch_deg=90.0 - peel_angle_deg, yaw_angle=peel_angle_deg, initial_guess=q_contact)
 
-        q_transfer = solve_ik_6dof([0.0, -0.35, CLEAR_Z])
-        q_place    = solve_ik_6dof(PLACE_XYZ)
+        q_transfer = solve_ik_6dof([0.0, -0.35, CLEAR_Z], initial_guess=q_peel)
+        q_place    = solve_ik_6dof(PLACE_XYZ, initial_guess=q_transfer)
         q_home     = HOME
 
         stages = [
