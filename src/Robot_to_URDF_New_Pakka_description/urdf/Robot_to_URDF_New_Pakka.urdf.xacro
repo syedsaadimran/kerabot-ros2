@@ -28,6 +28,7 @@
     <origin xyz="0.000000 0.426000 0.003028" rpy="-1.570796 -1.570796 0.000000"/>
     <axis xyz="-1.000000 0.000000 -0.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_4" type="continuous">
     <parent link="J2J3_Shoulder"/>
@@ -35,6 +36,7 @@
     <origin xyz="0.053972 0.000000 0.314000" rpy="0.000000 0.000000 0.000000"/>
     <axis xyz="-0.000000 0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_5" type="continuous">
     <parent link="Wrist_Motor"/>
@@ -42,6 +44,7 @@
     <origin xyz="0.059500 0.000000 0.130000" rpy="-0.000787 -1.570796 0.002101"/>
     <axis xyz="-0.000000 0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
     <hardware>

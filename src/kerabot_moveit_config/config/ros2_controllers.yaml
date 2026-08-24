@@ -26,5 +26,5 @@ arm_controller:
     open_loop_control: true
     allow_nonzero_velocity_at_trajectory_end: true
     constraints:
-      stopped_velocity_tolerance: 0.05
-      goal_time: 0.0
+      stopped_velocity_tolerance: 0.2
+      goal_time: 1.0

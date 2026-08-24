@@ -91,6 +91,7 @@
       <origin xyz="0.000000 0.000000 0.080000" rpy="-1.570796 0.000000 -0.000000"/>
       <axis xyz="0.000000 1.000000 -0.000000"/>
       <limit effort="100.0" velocity="1.00"/>
+      <dynamics damping="2.0" friction="0.2"/>
     </joint>
     <joint name="${prefix}Revolute_2" type="continuous">
       <parent link="${prefix}L110I_Shoulder"/>
@@ -98,6 +99,7 @@
       <origin xyz="-0.000000 -0.119000 0.057000" rpy="3.141593 0.000000 -0.000000"/>
       <axis xyz="0.000000 -0.000000 1.000000"/>
       <limit effort="100.0" velocity="1.00"/>
+      <dynamics damping="2.0" friction="0.2"/>
     </joint>
   </xacro:macro>
 </robot>

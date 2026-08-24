@@ -58,6 +58,7 @@
     <origin rpy="0 1.5708 0" xyz="0.150 0 0.050"/>
     <axis xyz="0 0 1"/>
     <limit effort="10.0" lower="-3.14159" upper="3.14159" velocity="3.14"/>
+    <dynamics damping="1.0" friction="0.1"/>
   </joint>
   <link name="end_effector_box_link">
     <inertial>
@@ -167,6 +168,7 @@
     <origin rpy="-1.570796 0.000000 -0.000000" xyz="0.000000 0.000000 0.080000"/>
     <axis xyz="0.000000 1.000000 -0.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_2" type="continuous">
     <parent link="L110I_Shoulder"/>
@@ -174,6 +176,7 @@
     <origin rpy="3.141593 0.000000 -0.000000" xyz="-0.000000 -0.119000 0.057000"/>
     <axis xyz="0.000000 -0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_3" type="continuous">
     <parent link="L110I_shoulder_2"/>
@@ -181,6 +184,7 @@
     <origin rpy="-1.570796 -1.570796 0.000000" xyz="0.000000 0.426000 0.003028"/>
     <axis xyz="-1.000000 0.000000 -0.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_4" type="continuous">
     <parent link="J2J3_Shoulder"/>
@@ -188,6 +192,7 @@
     <origin rpy="0.000000 0.000000 0.000000" xyz="0.053972 0.000000 0.314000"/>
     <axis xyz="-0.000000 0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <joint name="Revolute_5" type="continuous">
     <parent link="Wrist_Motor"/>
@@ -195,6 +200,7 @@
     <origin rpy="-0.000787 -1.570796 0.002101" xyz="0.059500 0.000000 0.130000"/>
     <axis xyz="-0.000000 0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
+    <dynamics damping="2.0" friction="0.2"/>
   </joint>
   <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
     <hardware>
