@@ -184,37 +184,7 @@
     <axis xyz="0.000000 -0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
   </joint>
-  <!-- ROS 2 control: generated generic system -->
-  <ros2_control name="Robot_Assembly_URDF_New_system" type="system">
-    <hardware>
-      <plugin>mock_components/GenericSystem</plugin>
-      <param name="cmd_topic">sim/Robot_Assembly_URDF_New_system/cmd</param>
-      <param name="state_topic">sim/Robot_Assembly_URDF_New_system/state</param>
-    </hardware>
-    <joint name="Revolute_1">
-      <command_interface name="position"/>
-      <command_interface name="velocity"/>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-      <state_interface name="effort"/>
-    </joint>
-    <joint name="Revolute_2">
-      <command_interface name="position"/>
-      <command_interface name="velocity"/>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
-      <state_interface name="velocity"/>
-      <state_interface name="effort"/>
-    </joint>
-  </ros2_control>
   <!-- Mount joints (cross-assembly connections) -->
-  <!-- These define how assemblies connect to each other. -->
-  <!-- When swapping a dummy assembly with a real part, -->
-  <!-- update the include + macro call above, and adjust -->
-  <!-- parent/child link names in the mount joint below. -->
   <joint name="Revolute_3" type="continuous">
     <parent link="L110I_shoulder_2"/>
     <child link="J2J3_Shoulder"/>
@@ -236,13 +206,31 @@
     <axis xyz="-0.000000 0.000000 1.000000"/>
     <limit effort="100.0" velocity="1.00"/>
   </joint>
-  <!-- ROS 2 control: generated generic system -->
+  <!-- Unified 6-DoF ros2_control System -->
   <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
     <hardware>
       <plugin>mock_components/GenericSystem</plugin>
       <param name="cmd_topic">sim/Robot_to_URDF_New_Pakka_system/cmd</param>
       <param name="state_topic">sim/Robot_to_URDF_New_Pakka_system/state</param>
     </hardware>
+    <joint name="Revolute_1">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="Revolute_2">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
     <joint name="Revolute_3">
       <command_interface name="position"/>
       <command_interface name="velocity"/>

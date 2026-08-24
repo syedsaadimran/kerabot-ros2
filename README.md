@@ -94,7 +94,11 @@ cd ~/kerabot_ws
 colcon build --packages-select Robot_to_URDF_New_Pakka_description kerabot_moveit_config
 source install/setup.bash
 
-# 3. Launch MoveIt 2 + RViz
+# 3. Launch Simulation & Motion Planning:
+# Option A: Full Gazebo Physics Simulation + MoveIt 2 + RViz (Real World Physics)
+ros2 launch kerabot_moveit_config gazebo_moveit.launch.py
+
+# Option B: Lightweight RViz Demo Mode (Mock Hardware)
 ros2 launch kerabot_moveit_config demo.launch.py
 
 # 4. Run the 6-DoF Sticker Pick, Peel & Place Benchmark Suite (in a 2nd terminal)

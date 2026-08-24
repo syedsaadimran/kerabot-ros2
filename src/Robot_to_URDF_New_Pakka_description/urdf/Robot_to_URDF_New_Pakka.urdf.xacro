@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="Robot_to_URDF_New_Pakka">
 
+  <!-- Arguments for simulation and hardware switching -->
+  <xacro:arg name="use_gazebo" default="false"/>
+  <xacro:arg name="gazebo_controllers" default="$(find kerabot_moveit_config)/config/ros2_controllers.yaml"/>
+
   <!-- Materials (shared across all assemblies) -->
   <material name="Steel">
     <color rgba="0.541 0.596 0.749 1.0"/>
@@ -20,11 +24,6 @@
   <xacro:Robot_Assembly_URDF_New prefix=""/>
 
   <!-- Mount joints (cross-assembly connections) -->
-  <!-- These define how assemblies connect to each other. -->
-  <!-- When swapping a dummy assembly with a real part, -->
-  <!-- update the include + macro call above, and adjust -->
-  <!-- parent/child link names in the mount joint below. -->
-
   <joint name="Revolute_3" type="continuous">
     <parent link="L110I_shoulder_2"/>
     <child link="J2J3_Shoulder"/>
@@ -49,14 +48,37 @@
     <limit effort="100.0" velocity="1.00"/>
   </joint>
 
-  <!-- ROS 2 control: generated generic system -->
+  <!-- Unified 6-DoF ros2_control System -->
   <ros2_control name="Robot_to_URDF_New_Pakka_system" type="system">
     <hardware>
-      <plugin>mock_components/GenericSystem</plugin>
-      <param name="cmd_topic">sim/Robot_to_URDF_New_Pakka_system/cmd</param>
-      <param name="state_topic">sim/Robot_to_URDF_New_Pakka_system/state</param>
+      <xacro:if value="$(arg use_gazebo)">
+        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+      </xacro:if>
+      <xacro:unless value="$(arg use_gazebo)">
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="cmd_topic">sim/Robot_to_URDF_New_Pakka_system/cmd</param>
+        <param name="state_topic">sim/Robot_to_URDF_New_Pakka_system/state</param>
+      </xacro:unless>
     </hardware>
 
+    <joint name="Revolute_1">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="Revolute_2">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
     <joint name="Revolute_3">
       <command_interface name="position"/>
       <command_interface name="velocity"/>
@@ -94,5 +116,60 @@
       <state_interface name="effort"/>
     </joint>
   </ros2_control>
+
+  <!-- Gazebo Physics & Plugin Integration -->
+  <xacro:if value="$(arg use_gazebo)">
+    <gazebo>
+      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+        <parameters>$(arg gazebo_controllers)</parameters>
+      </plugin>
+    </gazebo>
+
+    <gazebo reference="base_link">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <kp>1000000.0</kp>
+      <kd>1.0</kd>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="L110I_Shoulder">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="L110I_shoulder_2">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="J2J3_Shoulder">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="Wrist_Motor">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="L70IE_Finger">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <material>Gazebo/Green</material>
+    </gazebo>
+
+    <gazebo reference="end_effector_box_link">
+      <mu1>1.2</mu1>
+      <mu2>1.2</mu2>
+      <kp>1000000.0</kp>
+      <kd>1.0</kd>
+      <material>Gazebo/DarkGrey</material>
+    </gazebo>
+  </xacro:if>
 
 </robot>

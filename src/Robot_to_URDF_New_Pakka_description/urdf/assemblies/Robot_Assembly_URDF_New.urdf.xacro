@@ -109,34 +109,6 @@
       <limit effort="100.0" velocity="1.00"/>
     </joint>
 
-    <!-- ROS 2 control: generated generic system -->
-    <ros2_control name="${prefix}Robot_Assembly_URDF_New_system" type="system">
-      <hardware>
-        <plugin>mock_components/GenericSystem</plugin>
-        <param name="cmd_topic">sim/Robot_Assembly_URDF_New_system/cmd</param>
-        <param name="state_topic">sim/Robot_Assembly_URDF_New_system/state</param>
-      </hardware>
-
-      <joint name="${prefix}Revolute_1">
-        <command_interface name="position"/>
-        <command_interface name="velocity"/>
-        <state_interface name="position">
-          <param name="initial_value">0.0</param>
-        </state_interface>
-        <state_interface name="velocity"/>
-        <state_interface name="effort"/>
-      </joint>
-      <joint name="${prefix}Revolute_2">
-        <command_interface name="position"/>
-        <command_interface name="velocity"/>
-        <state_interface name="position">
-          <param name="initial_value">0.0</param>
-        </state_interface>
-        <state_interface name="velocity"/>
-        <state_interface name="effort"/>
-      </joint>
-    </ros2_control>
-
   </xacro:macro>
 
 </robot>
