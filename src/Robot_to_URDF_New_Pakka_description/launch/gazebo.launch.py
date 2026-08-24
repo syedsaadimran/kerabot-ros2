@@ -58,10 +58,9 @@ def generate_launch_description():
     )
 
     # Gazebo client (GUI)
-    gzclient = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
-        ),
+    gzclient = ExecuteProcess(
+        cmd=['gzclient', '--verbose'],
+        output='screen',
         condition=IfCondition(gui),
     )
 

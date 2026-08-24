@@ -80,10 +80,9 @@ def generate_launch_description():
     )
 
     # 2. Gazebo Client (GUI)
-    gzclient = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
-        ),
+    gzclient = ExecuteProcess(
+        cmd=['gzclient', '--verbose'],
+        output='screen',
         condition=IfCondition(gui),
     )
 
@@ -119,9 +118,9 @@ def generate_launch_description():
     moveit_controllers = load_yaml(moveit_controllers_file)
     trajectory_execution = {
         'moveit_manage_controllers': True,
-        'trajectory_execution.allowed_execution_duration_scaling': 1.2,
-        'trajectory_execution.allowed_goal_duration_margin': 0.5,
-        'trajectory_execution.allowed_start_tolerance': 0.01,
+        'trajectory_execution.allowed_execution_duration_scaling': 2.0,
+        'trajectory_execution.allowed_goal_duration_margin': 1.0,
+        'trajectory_execution.allowed_start_tolerance': 0.0,
     }
 
     planning_pipelines_config = {
