@@ -114,36 +114,28 @@ def generate_launch_description():
         ],
     )
 
-    # 5. MoveIt Configuration Dictionary
-    moveit_controllers = load_yaml(moveit_controllers_file)
-    trajectory_execution = {
-        'moveit_manage_controllers': True,
-        'trajectory_execution.allowed_execution_duration_scaling': 2.0,
-        'trajectory_execution.allowed_goal_duration_margin': 1.0,
-        'trajectory_execution.allowed_start_tolerance': 0.0,
-    }
+    # 5. MoveIt Configuration via MoveItConfigsBuilder
+    from moveit_configs_utils import MoveItConfigsBuilder
 
-    planning_limits = load_yaml(joint_limits_file)
-    cartesian_limits = load_yaml(cartesian_limits_file)
-    if cartesian_limits:
-        planning_limits.update(cartesian_limits)
-
-    planning_pipelines_config = {
-        'default_planning_pipeline': 'ompl',
-        'pipeline_names': ['ompl', 'pilz_industrial_motion_planner'],
-        'ompl': load_yaml(ompl_planning_file),
-        'pilz_industrial_motion_planner': load_yaml(pilz_planning_file),
-    }
+    moveit_config = (
+        MoveItConfigsBuilder("Robot_to_URDF_New_Pakka", package_name="kerabot_moveit_config")
+        .robot_description(file_path=gazebo_urdf_file)
+        .trajectory_execution(file_path=moveit_controllers_file)
+        .planning_pipelines(
+            pipelines=["ompl", "pilz_industrial_motion_planner"],
+            default_planning_pipeline="ompl"
+        )
+        .to_moveit_configs()
+    )
 
     move_group_params = [
-        {'robot_description': robot_description_content},
-        {'robot_description_semantic': robot_description_semantic_content},
-        {'robot_description_kinematics': load_yaml(kinematics_file)},
-        {'robot_description_planning': planning_limits},
-        planning_pipelines_config,
-        trajectory_execution,
-        moveit_controllers,
-        {'use_sim_time': True},
+        moveit_config.to_dict(),
+        {
+            'use_sim_time': True,
+            'trajectory_execution.allowed_start_tolerance': 0.0,
+            'trajectory_execution.allowed_execution_duration_scaling': 2.0,
+            'trajectory_execution.allowed_goal_duration_margin': 1.0,
+        },
     ]
 
     # 6. MoveGroup Node
@@ -155,19 +147,21 @@ def generate_launch_description():
     )
 
     # 7. RViz2 Node
+    rviz_params = [
+        moveit_config.robot_description,
+        moveit_config.robot_description_semantic,
+        moveit_config.robot_description_kinematics,
+        moveit_config.planning_pipelines,
+        {'use_sim_time': True},
+    ]
+
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
         name="rviz2",
         output="screen",
         arguments=["-d", os.path.join(pkg_moveit_config, "config", "moveit.rviz")],
-        parameters=[
-            {'robot_description': robot_description_content},
-            {'robot_description_semantic': robot_description_semantic_content},
-            {'robot_description_kinematics': load_yaml(kinematics_file)},
-            planning_pipelines_config,
-            {'use_sim_time': True},
-        ],
+        parameters=rviz_params,
         condition=IfCondition(use_rviz),
     )
 
