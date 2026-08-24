@@ -123,8 +123,13 @@ def generate_launch_description():
         'trajectory_execution.allowed_start_tolerance': 0.0,
     }
 
+    planning_limits = load_yaml(joint_limits_file)
+    cartesian_limits = load_yaml(cartesian_limits_file)
+    if cartesian_limits:
+        planning_limits.update(cartesian_limits)
+
     planning_pipelines_config = {
-        'default_planning_pipeline': 'pilz_industrial_motion_planner',
+        'default_planning_pipeline': 'ompl',
         'pipeline_names': ['ompl', 'pilz_industrial_motion_planner'],
         'ompl': load_yaml(ompl_planning_file),
         'pilz_industrial_motion_planner': load_yaml(pilz_planning_file),
@@ -134,8 +139,7 @@ def generate_launch_description():
         {'robot_description': robot_description_content},
         {'robot_description_semantic': robot_description_semantic_content},
         {'robot_description_kinematics': load_yaml(kinematics_file)},
-        {'robot_description_planning': load_yaml(joint_limits_file)},
-        {'robot_description_planning': load_yaml(cartesian_limits_file)},
+        {'robot_description_planning': planning_limits},
         planning_pipelines_config,
         trajectory_execution,
         moveit_controllers,
