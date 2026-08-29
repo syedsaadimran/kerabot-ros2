@@ -1,205 +1,311 @@
 # Kerabot — 6-DoF Robotic Arm Software Stack
 
-> A complete ROS 2 Humble + MoveIt 2 software stack for the **Kerabot 6-DoF** robotic arm,
-> featuring an active rotating 6th axis (`ee_rotation_joint`), a $329 \times 267 \times 100\text{ mm}$ end-effector box payload (`end_effector_box_link`),
-> jerk-limited trapezoidal motion via **Pilz PTP / LIN + Ruckig smoothing**,
-> persistent **ground plane & strict self-collision detection**, dynamic pipeline switching to OMPL,
-> and a comprehensive **Sticker Pick, Peel & Place Trajectory Benchmark Suite**.
+> **A complete ROS 2 Humble + MoveIt 2 + Gazebo software stack for the Kerabot 6-DoF industrial robotic arm.**
+> Features an active rotating 6th axis (`ee_rotation_joint`), a $329 \times 267 \times 100\text{ mm}$ ($1.2\text{ kg}$) end-effector suction payload box (`end_effector_box_link`), jerk-limited **Pilz LIN / PTP + Ruckig S-curve motion profiling**, rigid ODE physics simulation, **strict adjacent-only self-collision checking**, and a high-precision **Sticker Pick, Peel & Horizontal Place Motion Pipeline**.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-1. [Hardware & Kinematics Overview](#hardware--kinematics-overview)
-2. [Software Architecture & Layout](#software-architecture--layout)
-3. [Quick Setup & Verification Checklist](#quick-setup--verification-checklist)
-4. [Sticker Pick, Peel & Place Benchmark Suite](#sticker-pick-peel--place-benchmark-suite)
-5. [Motion Scripts & Test Suite](#motion-scripts--test-suite)
-6. [Ground Plane & Strict Collision Safety](#ground-plane--strict-collision-safety)
-7. [Pilz PTP / LIN + Ruckig Dynamics Architecture](#pilz-ptp--lin--ruckig-dynamics-architecture)
-8. [Troubleshooting & Verification Commands](#troubleshooting--verification-commands)
-
----
-
-## Hardware & Kinematics Overview
-
-| Property | Value |
-|---|---|
-| **DOF** | 6 active revolute joints (`Revolute_1` – `Revolute_5` + `ee_rotation_joint`) |
-| **MoveIt Planning Group** | `arm` (`base_link` $\rightarrow$ `end_effector_box_link`) |
-| **End Effector Payload** | `end_effector_box_link` ($0.329 \text{ m} \times 0.267 \text{ m} \times 0.100 \text{ m}$) |
-| **Base Mounting Link** | `base_link` (Z = 0.00m table level) |
-| **Peak Joint Torque Limit** | 5.0 N·m (Joints 1–5), 10.0 N·m (Joint 6) |
-| **Max Velocity Limits** | 2.79 rad/s (Joints 1–5), 3.14 rad/s (Joint 6) |
-
-### Joint Axes & Kinematic Boundaries
-- **Revolute_1** (base yaw) — rotation about **Z**: `[-2.90, +2.90] rad`
-- **Revolute_2** (shoulder pitch) — rotation about **X**: `[-2.90, +2.90] rad`
-- **Revolute_3** (elbow pitch) — rotation about **X**: `[-2.90, +2.90] rad`
-- **Revolute_4** (forearm roll) — rotation about **Z**: `[-2.90, +2.90] rad`
-- **Revolute_5** (wrist pitch) — rotation about **X**: `[-2.90, +2.90] rad`
-- **ee_rotation_joint** (active 6th axis EE rotation) — rotation about **Z**: `[-3.14159, +3.14159] rad`
-
-### Kinematic Tree (`check_urdf`)
-```text
-base_link
-  └── L110I_Shoulder
-      └── L110I_shoulder_2
-          └── J2J3_Shoulder
-              └── Wrist_Motor
-                  └── L70IE_Finger
-                      └── end_effector_box_link (Kinematic Tip)
-```
+1. [⚡ Quick Session Setup (Everyday Usage)](#-1-quick-session-setup-everyday-usage)
+2. [📦 From-Scratch Installation Guide (Fresh Setup / Fork)](#-2-from-scratch-installation-guide-fresh-setup--fork)
+3. [🤖 Hardware & Kinematics Specifications](#-3-hardware--kinematics-specifications)
+4. [🗺️ 3D Workspace Grid & Coordinate Reference Sheet](#-4-3d-workspace-grid--coordinate-reference-sheet)
+5. [🚀 Flagship Motion Pipelines & Scripts](#-5-flagship-motion-pipelines--scripts)
+6. [🛡️ Safety, Dynamics & Physics Architecture](#-6-safety-dynamics--physics-architecture)
+7. [🔧 Troubleshooting & Verification Commands](#-7-troubleshooting--verification-commands)
 
 ---
 
-## Software Architecture & Layout
+## ⚡ 1. Quick Session Setup (Everyday Usage)
 
-```text
-kerabot_ws/
-├── src/
-│   ├── Robot_to_URDF_New_Pakka_description/  # URDF xacro geometry, meshes, CMakeLists
-│   ├── kerabot_moveit_config/                # MoveIt 2 configuration, SRDF, joint limits
-│   └── pymoveit2/                            # Python MoveIt 2 API wrapper
-├── scripts/                                   # All executable motion & benchmark scripts
-│   ├── peel_place_benchmark_suite.py         # 6-DoF Sticker Pick, Peel & Place Trajectory Benchmark Suite
-│   ├── pick_place_industrial_sim.py          # 6-DoF 5-Stage Pick & Place Simulation
-│   ├── pipeline_stress_test.py               # Chained Waypoint & Dynamic Pipeline Switching Test
-│   ├── stress_test.py                        # 3-Category Joint Sweep & Limit Stress Test
-│   ├── collision_stress_test.py              # Self-Collision Boundary Finder
-│   ├── compare_profiles.py                   # Trajectory Dynamics & Profile Comparisons
-│   ├── manual_move.py                        # Interactive Validated Planner
-│   └── add_ground_plane.py                   # Ground Plane Collision Publisher
-└── results/                                   # Exported PNG visual analytics & plots
-    ├── peel_benchmark_summary.png            # Sticker peel execution & jerk metrics
-    ├── peel_benchmark_velocity.png           # Speed scaling factor curves (0.2 -> 1.0)
-    ├── trapezoidal_dynamics_plot v1.png
-    ├── ruckig_comparison.png
-    └── ruckig_stats.png
-```
+Run these commands for every new session once your workspace is set up:
 
----
-
-## Quick Setup & Verification Checklist
-
-Always execute setup & verification steps in the following order:
-
+### Step 1: Clean Lingering Processes (Optional Safety Step)
+If Gazebo was previously closed abruptly, run this one-liner to ensure no background processes hold the simulation ports:
 ```bash
-# 1. Source ROS 2 Humble & workspace setup
+killall -9 gzserver gzclient robot_state_publisher rviz2 move_group 2>/dev/null || true
+```
+
+### Step 2: Terminal 1 — Launch Gazebo + MoveIt 2 + RViz
+Open your first terminal window:
+```bash
 source /opt/ros/humble/setup.bash
 source ~/kerabot_ws/install/setup.bash
-
-# 2. Rebuild packages & compile URDF from xacro (if modifying URDF/SRDF)
-cd ~/kerabot_ws
-colcon build --packages-select Robot_to_URDF_New_Pakka_description kerabot_moveit_config
-source install/setup.bash
-
-# 3. Launch Simulation & Motion Planning:
-# Option A: Full Gazebo Physics Simulation + MoveIt 2 + RViz (Real World Physics)
 ros2 launch kerabot_moveit_config gazebo_moveit.launch.py
+```
+> ⏳ *Wait ~5–10 seconds until Gazebo and RViz open and you see the log output:* `You can start planning now!`
 
-# Option B: Lightweight RViz Demo Mode (Mock Hardware)
-ros2 launch kerabot_moveit_config demo.launch.py
+---
 
-# 4. Run the 6-DoF Sticker Pick, Peel & Place Benchmark Suite (in a 2nd terminal)
+### Step 3: Terminal 2 — Run Motion Pipelines & Scripts
+Open a **new separate terminal** and source the environment:
+```bash
+source /opt/ros/humble/setup.bash
+source ~/kerabot_ws/install/setup.bash
+```
+
+Then execute any of the following pipelines:
+
+#### A. Run the High-Precision Sticker Pick, Peel & Place Pipeline
+```bash
+# 1. Offline mathematical & kinematics dry-run test (No robot launch needed):
+python3 ~/kerabot_ws/scripts/test_precise_pipeline.py --dry-run --angle 30
+
+# 2. Live execution in Gazebo (Peel at 30° at 40% speed):
+python3 ~/kerabot_ws/scripts/test_precise_pipeline.py --angle 30 --speed 0.4
+```
+
+#### B. Run the User-Configurable 3D Path Designer
+```bash
+# Test custom 5-step waypoints offline:
+python3 ~/kerabot_ws/scripts/manual_trajectory_designer.py --dry-run
+```
+
+#### C. Run the Multi-Angle Peeling Benchmark Suite
+```bash
+# Runs full 6-stage benchmark across 15°, 30°, 45°, 60° peel angles and exports plots:
 python3 ~/kerabot_ws/scripts/peel_place_benchmark_suite.py
-
-# 5. Run the 6-DoF Industrial Pick & Place Simulation
-python3 ~/kerabot_ws/scripts/pick_place_industrial_sim.py
-
-# 6. Run the Motion Pipelining & Switching Stress Test
-python3 ~/kerabot_ws/scripts/pipeline_stress_test.py
 ```
 
 ---
 
-## Sticker Pick, Peel & Place Benchmark Suite
+## 📦 2. From-Scratch Installation Guide (Fresh Setup / Fork)
 
-The flagship benchmark script [`scripts/peel_place_benchmark_suite.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/peel_place_benchmark_suite.py) tests realistic peeling kinematics across MoveIt 2 planners and dynamics scaling factors:
+Follow this complete walkthrough if you are setting up the project on a fresh machine or forking the repository.
 
-### Multi-Stage Peeling State Machine
-- **Stage 1: Home $\rightarrow$ Pre-Pick Approach** (OMPL `RRTConnect` / Free-space hover at $Z = 0.35\text{ m}$)
-- **Stage 2: Pre-Pick $\rightarrow$ Sticker Contact** (Pilz `LIN` / Straight vertical descent to vacuum contact at $Z = 0.22\text{ m}$)
-- **Stage 3: Dynamic Sticker Peel Phase** (Pilz `LIN` / Angled Cartesian Retraction):
-  - **Peel Angles Tested**: **15°**, **30°**, **45°**, and **60°** wrist/pitch tilt angles relative to substrate.
-  - Retracts along vector $\vec{v} = (-\cos\alpha, 0, \sin\alpha)$ over $0.12\text{ m}$ with steady linear velocity to simulate clean sticker detachment without tearing.
-- **Stage 4: Peel Exit $\rightarrow$ High Clearance Transfer** (Pilz `PTP` / Elevates to $Z = 0.40\text{ m}$)
-- **Stage 5: Transfer $\rightarrow$ Placement Contact** (Pilz `LIN` / Straight vertical approach to placement surface at $Z = 0.22\text{ m}$ with 0° flat alignment)
-- **Stage 6: Release & Return Home** (OMPL `RRTConnect` / Return sweep back to `Home`)
-
-### Pipeline & Speed Scaling Matrix
-- **Pipelines Benchmark**:
-  - `Pipeline A: OMPL (RRTConnect) + Ruckig`
-  - `Pipeline B: Pilz LIN + Ruckig`
-  - `Pipeline C: Pilz PTP + Ruckig`
-- **Speed Scaling Sweeps**: `max_velocity_scaling_factor` and `max_acceleration_scaling_factor` from $0.2 \rightarrow 1.0$ in $0.2$ increments.
-
-### Analytics & Visual Exports (`~/kerabot_ws/results/`)
-- Outputs an itemized terminal summary table listing **Plan Time (ms)**, **Exec Time (s)**, **Peak Vel**, **Peak Accel**, **Peak Jerk** ($< 5.0\text{ rad/s}^3$ limit), **Torques**, and **Collision Pass/Fail**.
-- Saves comparative PNG plots:
-  - `results/peel_benchmark_summary.png`: Bar charts comparing execution time, planning time, and jerk thresholds across peel angles.
-  - `results/peel_benchmark_velocity.png`: Speed scaling factor curves ($0.2 \rightarrow 1.0$) overlaying Peak Velocity, Acceleration, and Jerk profiles.
+### Prerequisites & Operating System
+* **Operating System**: **Ubuntu 22.04 LTS (Jammy Jellyfish)** or **Windows 11 with WSL2 (Ubuntu 22.04)**.
+* **Architecture**: x86_64 / amd64.
 
 ---
 
-## Motion Scripts & Test Suite
-
-All executable scripts are housed in [`~/kerabot_ws/scripts/`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/):
-
-* **`peel_place_benchmark_suite.py`**: Full 6-DoF Sticker Pick, Peel & Place Trajectory Benchmark Suite.
-* **`pick_place_industrial_sim.py`**: 6-DoF 5-stage Pick & Place simulation with active EE box collision checking.
-* **`pipeline_stress_test.py`**: Chained continuous waypoint execution & dynamic pipeline switching test.
-* **`stress_test.py`**: 3-category joint-space sweep, rapid-fire, and limit boundary stress test.
-* **`collision_stress_test.py`**: Joint sweep tool mapping self-collision boundaries.
-* **`add_ground_plane.py`**: Adds/removes persistent $2\text{ m} \times 2\text{ m} \times 0.1\text{ m}$ table collision box ($Z_{\text{top}} = 0.0\text{ m}$).
+### Step 1: System Update & Essential Tools
+Open a terminal and install basic development utilities:
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl gnupg2 lsb-release git build-essential \
+                    python3-pip python3-colcon-common-extensions \
+                    python3-rosdep python3-vcstool
+```
 
 ---
 
-## Ground Plane & Strict Collision Safety
+### Step 2: Install ROS 2 Humble Desktop
+Set up the official ROS 2 Humble repository:
+```bash
+# 1. Set up locale
+sudo locale-gen en_US en_US.UTF-8
+sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+export LANG=en_US.UTF-8
 
-### SRDF Strict Self-Collision Matrix
-In `src/kerabot_moveit_config/config/Robot_to_URDF_New_Pakka.srdf`:
-- **Allowed Exception**: ONLY `<disable_collisions link1="end_effector_box_link" link2="L70IE_Finger" reason="Adjacent"/>` (its immediate mounting flange).
-- **Strict Active Checks**: All other structural links (`Wrist_Motor`, `J2J3_Shoulder`, `L110I_shoulder_2`, `L110I_Shoulder`, `base_link`) have **active self-collision checking** against `end_effector_box_link`.
+# 2. Add the ROS 2 GPG key
+sudo apt install -y software-properties-common
+sudo add-apt-repository universe
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 
-### Robot Collision Padding
-In `src/kerabot_moveit_config/config/kinematics.yaml`:
-- `default_robot_padding: 0.01` ($10\text{ mm}$ safety margin around the end-effector box geometry).
+# 3. Add the repository to sources list
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-### Ground Clearance Enforcement
-Any trajectory attempting to drive the end-effector box or intermediate links below $Z < 0.02\text{ m}$ is rejected by MoveIt FCL and guarded in Python IK solvers.
+# 4. Install ROS 2 Humble Desktop
+sudo apt update
+sudo apt install -y ros-humble-desktop
+```
 
 ---
 
-## Pilz PTP / LIN + Ruckig Dynamics Architecture
+### Step 3: Install Gazebo Classic & ROS 2 Control Packages
+```bash
+sudo apt install -y \
+    gazebo \
+    libgazebo-dev \
+    ros-humble-gazebo-ros-pkgs \
+    ros-humble-gazebo-ros2-control \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-joint-state-broadcaster \
+    ros-humble-joint-trajectory-controller
+```
+
+---
+
+### Step 4: Install MoveIt 2 & Motion Planners
+```bash
+sudo apt install -y \
+    ros-humble-moveit \
+    ros-humble-moveit-ros-planning-interface \
+    ros-humble-moveit-ros-visualization \
+    ros-humble-moveit-planners-ompl \
+    ros-humble-pilz-industrial-motion-planner
+```
+
+---
+
+### Step 5: Install Python Mathematical & Robotics Dependencies
+```bash
+pip3 install --upgrade pip
+pip3 install numpy scipy matplotlib
+```
+
+---
+
+### Step 6: Clone and Build the Kerabot Workspace
+```bash
+# 1. Create the workspace structure
+mkdir -p ~/kerabot_ws/src
+cd ~/kerabot_ws
+
+# 2. Clone the repository into src
+git clone https://github.com/syedsaadimran/kerabot-ros2.git src
+
+# 3. Initialize and update rosdep
+sudo rosdep init 2>/dev/null || true
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y
+
+# 4. Build the workspace
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install
+
+# 5. Source the workspace
+source install/setup.bash
+```
+
+---
+
+### Step 7: Environment Configuration (`~/.bashrc`)
+Add ROS and workspace sourcing automatically to your bash session:
+```bash
+echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source ~/kerabot_ws/install/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+```
+
+*(If running on WSL2 / WSLg on Windows 11, GUI applications like Gazebo and RViz2 will open automatically through Wayland / WSLg without requiring external X-servers).*
+
+---
+
+## 🤖 3. Hardware & Kinematics Specifications
+
+| Property | Value |
+|:---|:---|
+| **Degrees of Freedom (DoF)** | 6 active revolute joints (`Revolute_1` $\dots$ `Revolute_5` + `ee_rotation_joint`) |
+| **MoveIt Planning Group** | `arm` (`base_link` $\rightarrow$ `end_effector_box_link`) |
+| **End-Effector Payload Box** | $329\text{ mm} \times 267\text{ mm} \times 100\text{ mm}$ ($1.2\text{ kg}$, $z=+0.050\text{ m}$ centroid offset) |
+| **Collision Safety Padding** | $+15\text{ mm}$ padding ($0.359 \times 0.297 \times 0.130\text{ m}$) around end-effector box |
+| **Base Mounting Link** | `base_link` ($Z = 0.00\text{ m}$ table level) |
+| **Active Controllers** | `/joint_state_broadcaster` (50 Hz), `/arm_controller` (JointTrajectoryController @ 200 Hz) |
+
+### 6-DoF Kinematic Chain
+$$\text{world} \xrightarrow{\text{fixed}} \text{base\_link} \xrightarrow{\text{Revolute\_1}} \text{L110I\_Shoulder} \xrightarrow{\text{Revolute\_2}} \text{L110I\_shoulder\_2} \xrightarrow{\text{Revolute\_3}} \text{J2J3\_Shoulder} \xrightarrow{\text{Revolute\_4}} \text{Wrist\_Motor} \xrightarrow{\text{Revolute\_5}} \text{L70IE\_Finger} \xrightarrow{\text{ee\_rotation\_joint}} \text{end\_effector\_box\_link}$$
+
+---
+
+## 🗺️ 4. 3D Workspace Grid & Coordinate Reference Sheet
+
+All coordinates are in **meters** relative to the origin $(0, 0, 0)$ located at the **bottom center of `base_link` on the table floor**.
 
 ```text
- Pilz PTP / LIN (Trapezoidal Cartesian & Joint Profiles)
-      │
-      ▼
- AddRuckigTrajectorySmoothing  ← Rounds velocity corners into jerk-limited S-curves
-      │                          Enforces max_jerk limits from joint_limits.yaml
-      ▼
- joint_limits.yaml             (Velocity, acceleration, and jerk caps)
-      │
-      ▼
- arm_controller (FollowJointTrajectory for 6 active joints)
+                                  +Z (Up / Height)
+                                   ▲
+                                   │
+                                   │       [ Safe Transit:   Z = +0.38m to +0.45m ]
+                                   │       [ Hover Zone:     Z = +0.30m to +0.35m ]
+                                   │       [ Table Contact:  Z = +0.20m to +0.22m ]
+                                   │       [ Ground Limit:   Z = +0.03m (Safety Guard) ]
+                    (Left)         │
+                     -X ◄──────────┼──────────► +X (Right)
+                                  /│
+                                 / │
+                                /  ▼ (Table Floor: Z = 0.00m)
+                 (In Front)   -Y   +Y (Behind Robot)
 ```
+
+### Coordinate Ranges & Roles
+* **$X$ Axis (Left / Right)**: Range $[-0.35\text{ m}, +0.35\text{ m}]$. Pick target is at $+0.25\text{ m}$ (Right), Place target is at $-0.25\text{ m}$ (Left).
+* **$Y$ Axis (Front / Back)**: Range $[-0.20\text{ m}, -0.45\text{ m}]$. **Negative $Y$ is the active front workspace** where table operations occur.
+* **$Z$ Axis (Elevation)**: Range $[+0.03\text{ m}, +0.55\text{ m}]$. $Z < 0.03\text{ m}$ is strictly rejected by collision guards to protect the table surface.
+* **Standard Flat Horizontal Pose**: `Roll = -172.8°, Pitch = 30.4°, Yaw = -172.0°` aligns the bottom suction face completely parallel and flat against the table.
+* **Angled Peeling Pitch**: Adding peel angle $\theta$ to the Pitch angle ($[-172.8^\circ, 30.4^\circ + \theta, -172.0^\circ]$) provides precise knife-edge peel alignment.
 
 ---
 
-## Troubleshooting & Verification Commands
+## 🚀 5. Flagship Motion Pipelines & Scripts
 
-### Check Planners Loaded in ROS 2
-```bash
-ros2 param get /move_group default_planning_pipeline
-# Expected: pilz_industrial_motion_planner
+All executable scripts reside in [`~/kerabot_ws/scripts/`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/):
 
-ros2 param get /move_group planning_pipelines
-# Expected: ['ompl', 'pilz_industrial_motion_planner']
+| Script | Purpose & Key Features |
+| :--- | :--- |
+| [`scripts/precise_peel_place_pipeline.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/precise_peel_place_pipeline.py) | **High-Precision Motion Engine**: Exact $SE(3)$ DLS Inverse Kinematics ($<0.05\text{ mm}$ position error, $<0.01^\circ$ planar tilt error), millimetric Cartesian path generator, and S-curve jerk profiling. |
+| [`scripts/test_precise_pipeline.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/test_precise_pipeline.py) | **Precision Verification Suite**: Supports `--dry-run` offline kinematics validation and live MoveIt/Gazebo execution. Exports comparative charts to `results/`. |
+| [`scripts/manual_trajectory_designer.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/manual_trajectory_designer.py) | **User-Configurable Path Designer**: Allows defining custom lists of 3D $(X, Y, Z)$ waypoints, Euler angles, motion types (`LIN`/`PTP`), and speeds with offline validation. |
+| [`scripts/collision_aware_planner.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/collision_aware_planner.py) | **Safety Autopilot**: Validates paths via `/check_state_validity` and automatically computes OMPL detours around obstacles and self-collisions. |
+| [`scripts/peel_place_benchmark_suite.py`](file:///wsl.localhost/Ubuntu-22.04/home/saad/kerabot_ws/scripts/peel_place_benchmark_suite.py) | **Multi-Angle Peeling Benchmark**: Tests peeling dynamics across $15^\circ, 30^\circ, 45^\circ, 60^\circ$ peel angles and speeds ($0.2 \to 1.0$). |
+
+---
+
+## 🛡️ 6. Safety, Dynamics & Physics Architecture
+
+### 7-Step Precision State Machine
+```text
+[Stage 1: Pre-Pick Hover]       (Z = +0.32m, 0.0° Flat Orientation)
+           │
+           ▼ (Pure Vertical Linear Descent, v <= 0.03 m/s)
+[Stage 2: Flat Contact]          (Z = +0.22m, Pos Error < 0.05mm, Tilt Error < 0.01°)
+           │
+           ▼ (Linear Peel Vector: -cos θ, 0, sin θ + Synchronized Pitch)
+[Stage 3: Angled Peeling]        (@ 15°, 30°, 45°, 60° Retraction)
+           │
+           ▼ (High-Clearance Transfer Arc, Z = +0.38m)
+[Stage 4: Safe Transit]          (Ground clearance >= 0.38m)
+           │
+           ▼ (Target Pre-Place Hover)
+[Stage 5A: Pre-Place Hover]      (Z = +0.32m, 0.0° Flat Orientation)
+           │
+           ▼ (Pure Vertical Linear Descent)
+[Stage 5B: Horizontal Placement] (Z = +0.22m, Planar Tilt Error = 0.0011°)
+           │
+           ▼ (Pure Vertical Retraction)
+[Stage 6: Lift-Off & Home]       (Z = +0.32m -> Return to HOME)
 ```
 
-### Validate URDF Structure
+### Strict Self-Collision Matrix (ACM)
+In `src/kerabot_moveit_config/config/Robot_to_URDF_New_Pakka.srdf`:
+- The only collision exception granted to `end_effector_box_link` is its immediate mounting flange (`L70IE_Finger`).
+- All other arm links (`Wrist_Motor`, `J2J3_Shoulder`, `L110I_shoulder_2`, `L110I_Shoulder`, `base_link`) have **active continuous self-collision checks** against the large payload box.
+
+### Rigid Industrial Physics & Stiff Servo Gains
+* **ODE Physics Engine (`sticker_workcell.world`)**:
+  * Error Reduction Parameter (`erp: 0.8`): Snaps joint constraint errors to zero (eliminating floaty/spongy joint sag).
+  * Constraint Force Mixing (`cfm: 0.00000001`): Ensures rigid steel pinning.
+  * Solver iterations (`iters: 100`): High-precision constraint convergence.
+* **Industrial Joint PID Gains (`ros2_controllers.yaml`)**:
+  * High-stiffness closed-loop position holding ($k_p = 2000 \dots 4500\text{ N}\cdot\text{m/rad}$).
+
+---
+
+## 🔧 7. Troubleshooting & Verification Commands
+
+### 1. Validate URDF Structure & Kinematic Tree
 ```bash
 check_urdf install/Robot_to_URDF_New_Pakka_description/share/Robot_to_URDF_New_Pakka_description/urdf/Robot_to_URDF_New_Pakka.urdf
 ```
+
+### 2. Verify Loaded MoveIt Planners
+```bash
+ros2 param get /move_group planning_pipelines
+# Expected output: ['ompl', 'pilz_industrial_motion_planner']
+```
+
+### 3. Kill Stale Gazebo / ROS Processes
+If a simulation launch fails with `bind: Address already in use`:
+```bash
+killall -9 gzserver gzclient robot_state_publisher rviz2 move_group 2>/dev/null || true
+```
+
+---
+
+## 👥 Authors & Repository
+* **Repository**: [syedsaadimran/kerabot-ros2](https://github.com/syedsaadimran/kerabot-ros2.git)
+* **Branch**: `main`
+* **Maintainer**: Syed Saad Imran
